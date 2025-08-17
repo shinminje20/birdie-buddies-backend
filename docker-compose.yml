@@ -1,0 +1,132 @@
+services:
+  db:
+    image: postgres:16
+    container_name: birdie-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: birdiebuddies
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    container_name: birdie-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: birdie-api
+    env_file: [./.env]
+    # IMPORTANT: inside containers we use service names (db/redis), not localhost
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/birdiebuddies
+      SYNC_DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/birdiebuddies
+      REDIS_URL: redis://redis:6379/0
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
+    command: bash -lc "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker-outbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: birdie-worker-outbox
+    env_file: [./.env]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/birdiebuddies
+      SYNC_DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/birdiebuddies
+      REDIS_URL: redis://redis:6379/0
+    command: python -m app.workers.outbox_dispatcher
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker-regmux:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: birdie-worker-regmux
+    env_file: [./.env]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/birdiebuddies
+      SYNC_DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/birdiebuddies
+      REDIS_URL: redis://redis:6379/0
+    command: python -m app.workers.registration_mux
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker-promomux:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: birdie-worker-promomux
+    env_file: [./.env]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/birdiebuddies
+      SYNC_DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/birdiebuddies
+      REDIS_URL: redis://redis:6379/0
+    command: python -m app.workers.promotion_mux
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker_session_closer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: birdie-worker-session-closer
+    env_file: [./.env]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/app
+      REDIS_URL: redis://redis:6379/0
+      AUTO_CLOSE_INTERVAL_SEC: "30" # adjust as desired
+      AUTO_CLOSE_BATCH: "200"
+      AUTO_CLOSE_LOCK_TTL_SEC: "25"
+    command: python -m app.workers.session_closer
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
