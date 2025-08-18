@@ -93,7 +93,7 @@ async def verify_otp(payload: VerifyOtpIn, response: Response, db: AsyncSession 
     response.set_cookie(value=token, **_cookie_opts())
     # after response.set_cookie(...)
     max_age = S.JWT_EXPIRE_MINUTES * 60
-    response.headers.add(
+    response.headers.append(
         "Set-Cookie",
         f"{S.SESSION_COOKIE_NAME}={token}; "
         f"Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age={max_age}"
