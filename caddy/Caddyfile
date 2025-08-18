@@ -1,4 +1,4 @@
-yourname.asuscomm.com {
+mjserviceinc.asuscomm.com {
     encode zstd gzip
     reverse_proxy api:8000   
     # 선택: ACME 연락 이메일 지정(권장)
