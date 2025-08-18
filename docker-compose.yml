@@ -44,7 +44,7 @@ services:
       SYNC_DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/birdiebuddies
       REDIS_URL: redis://redis:6379/0
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
-    command: bash -lc "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: bash -lc "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*""
     ports:
       - "8000:8000"
     depends_on:
