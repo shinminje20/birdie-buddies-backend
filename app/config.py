@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     
     # Auth
     JWT_SECRET: str = "dev-secret-change-me"  # set a strong random value in prod
-    JWT_EXPIRE_MINUTES: int = 60 * 30      # 30 minutes
+    JWT_EXPIRE_MINUTES: int = 60 * 60 * 24 * 7      # 7 days
     SESSION_COOKIE_NAME: str = "session"
     
     # Rate limits (sane defaults for dev)

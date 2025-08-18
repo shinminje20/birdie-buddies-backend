@@ -12,14 +12,25 @@ from .jwt import verify_jwt
 S = get_settings()
 
 
+# def _cookie_opts():
+#     return {
+#         "key": S.SESSION_COOKIE_NAME,
+#         "httponly": True,
+#         "secure": S.ENV == "prod",
+#         "samesite": "lax",
+#         "max_age": S.JWT_EXPIRE_MINUTES * 60,
+#         "path": "/",
+#     }
+    
 def _cookie_opts():
     return {
         "key": S.SESSION_COOKIE_NAME,
         "httponly": True,
-        "secure": S.ENV == "prod",
-        "samesite": "lax",
+        "secure": True,          # always True in prod (you're behind HTTPS via Caddy)
+        "samesite": "none",      # <-- cross-site requires None
         "max_age": S.JWT_EXPIRE_MINUTES * 60,
         "path": "/",
+        # "domain": "mjserverinc.asuscomm.com",  # usually omit; host-only is safer
     }
 
 
