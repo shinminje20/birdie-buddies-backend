@@ -25,8 +25,7 @@ ALLOWED_ORIGINS = [
 def create_app() -> FastAPI:
     app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG)
 
-    app.add_middleware(RequestContextMiddleware)
-    app.add_middleware(MetricsHTTPMiddleware)
+    
     app.add_middleware(
         CORSMiddleware,
         allow_origins=ALLOWED_ORIGINS,
@@ -35,6 +34,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],                     # or ["Authorization","Content-Type", ...]
         expose_headers=["*"], 
     )
+    
+    # then your custom middlewares
+    app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(MetricsHTTPMiddleware)
 
     app.include_router(health_router.router)
     app.include_router(auth_router.router)

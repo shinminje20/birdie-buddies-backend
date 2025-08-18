@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # App
-    APP_NAME: str = "badminton-app"
+    APP_NAME: str = "birdiebuddies-app"
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
 
