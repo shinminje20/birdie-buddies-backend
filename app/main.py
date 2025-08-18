@@ -17,14 +17,18 @@ import uvicorn
 
 settings = get_settings()
 setup_logging()
-
+ALLOWED_ORIGINS = [
+    "https://birdie-buddies-a32af.web.app",
+    "https://birdie-buddies-a32af.firebaseapp.com",  
+    "http://localhost:5173",
+]
 def create_app() -> FastAPI:
     app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG)
 
     
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[settings.FRONTEND_ORIGIN, settings.FRONTEND_DEPLOYED_domain_1, settings.FRONTEND_DEPLOYED_domain_2],
+        allow_origins=ALLOWED_ORIGINS,
         allow_credentials=True,
         allow_methods=["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
         allow_headers=["*"],                     # or ["Authorization","Content-Type", ...]
