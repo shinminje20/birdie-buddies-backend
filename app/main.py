@@ -25,7 +25,7 @@ def create_app() -> FastAPI:
     app.add_middleware(MetricsHTTPMiddleware)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[settings.FRONTEND_ORIGIN] if settings.ENV != "prod" else [settings.FRONTEND_ORIGIN],
+        allow_origins=[settings.FRONTEND_ORIGIN] if settings.ENV != "prod" else [settings.FRONTEND_DEPLOYED_domain_1, settings.FRONTEND_DEPLOYED_domain_2],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

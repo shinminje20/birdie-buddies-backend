@@ -43,7 +43,8 @@ class Settings(BaseSettings):
     REQUEST_ID_HEADER: str = "X-Request-ID"
     
     FRONTEND_ORIGIN: str = "http://localhost:5173"  # vite dev server
-
+    FRONTEND_DEPLOYED_domain_1: str = "birdie-buddies-a32af.web.app"
+    FRONTEND_DEPLOYED_domain_2: str = "birdie-buddies-a32af.firebaseapp.com"
     AUTO_CLOSE_INTERVAL_SEC: int = 30      # how often the worker scans
     AUTO_CLOSE_BATCH: int = 200            # max sessions to close per scan
     AUTO_CLOSE_LOCK_TTL_SEC: int = 25      # Redis lock TTL (must be < interval)
