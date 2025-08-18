@@ -21,15 +21,19 @@ setup_logging()
 def create_app() -> FastAPI:
     app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG)
 
-    app.add_middleware(RequestContextMiddleware)
-    app.add_middleware(MetricsHTTPMiddleware)
+    
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[settings.FRONTEND_ORIGIN] if settings.ENV != "prod" else [settings.FRONTEND_DEPLOYED_domain_1, settings.FRONTEND_DEPLOYED_domain_2],
+        allow_origins=[settings.FRONTEND_ORIGIN, settings.FRONTEND_DEPLOYED_domain_1, settings.FRONTEND_DEPLOYED_domain_2],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
+        allow_headers=["*"],                     # or ["Authorization","Content-Type", ...]
+        expose_headers=["*"], 
     )
+    
+    # then your custom middlewares
+    app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(MetricsHTTPMiddleware)
 
     app.include_router(health_router.router)
     app.include_router(auth_router.router)
