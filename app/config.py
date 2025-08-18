@@ -7,7 +7,7 @@ import os
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    ENV: Literal["dev", "prod", "test"] = "dev"
+    ENV: Literal["dev", "prod", "test"] = "prod"
     DEBUG: bool = True
 
     # App
