@@ -1,8 +1,9 @@
 from __future__ import annotations
-from typing import Optional
+from typing import Optional, Sequence, Literal
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, insert, func
+from sqlalchemy import select, desc, update, insert, func
 from ..models import LedgerEntry, Wallet
+import uuid
 
 # EXPECTED status per kind
 _KIND_STATUS = {
@@ -111,3 +112,37 @@ async def apply_ledger_entry(
             updated_at   = func.now(),
         )
     )
+
+
+LedgerKind = Literal["deposit_in","fee_hold","fee_capture","hold_release","refund","penalty"]
+async def list_ledger_for_user(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    limit: int = 50,
+    before_id: Optional[int] = None,
+) -> Sequence[LedgerEntry]:
+    q = select(LedgerEntry).where(LedgerEntry.user_id == user_id).order_by(desc(LedgerEntry.id)).limit(limit)
+    if before_id:
+        q = q.where(LedgerEntry.id < before_id)
+    res = await db.execute(q)
+    return list(res.scalars().all())
+
+
+async def list_ledger_admin(
+    db: AsyncSession,
+    *,
+    user_id: Optional[uuid.UUID] = None,
+    session_id: Optional[uuid.UUID] = None,
+    limit: int = 100,
+    before_id: Optional[int] = None,
+) -> Sequence[LedgerEntry]:
+    q = select(LedgerEntry).order_by(desc(LedgerEntry.id)).limit(limit)
+    if before_id:
+        q = q.where(LedgerEntry.id < before_id)
+    if user_id:
+        q = q.where(LedgerEntry.user_id == user_id)
+    if session_id:
+        q = q.where(LedgerEntry.session_id == session_id)
+    res = await db.execute(q)
+    return list(res.scalars().all())
