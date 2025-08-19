@@ -52,26 +52,25 @@ class UserOut(BaseModel):
 async def logout(response: Response):
     name = S.SESSION_COOKIE_NAME
     past = "Thu, 01 Jan 1970 00:00:00 GMT"
+    
+    response.headers.append(
+        "Set-Cookie",
+        f"{name}=; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Expires={past}; Max-Age=0"
+    )
+    # Host-only, non-Partitioned
+    response.headers.append(
+        "Set-Cookie",
+        f"{name}=; Path=/; HttpOnly; Secure; SameSite=None; Expires={past}; Max-Age=0"
+    )
+    # Domain-qualified (in case older builds used Domain=)
+    response.headers.append(
+        "Set-Cookie",
+        f"{name}=; Domain=mjserverinc.asuscomm.com; Path=/; HttpOnly; Secure; SameSite=None; Expires={past}; Max-Age=0"
+    )
 
-    # Host-only, Partitioned (3P cookie; Chrome CHIPS)
-    response.headers.append(
-        "Set-Cookie",
-        f"{name}=; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; "
-        f"Expires={past}; Max-Age=0"
-    )
-    # Host-only, non-Partitioned (in case an old one exists)
-    response.headers.append(
-        "Set-Cookie",
-        f"{name}=; Path=/; HttpOnly; Secure; SameSite=None; "
-        f"Expires={past}; Max-Age=0"
-    )
-    # Domain-qualified (in case a past build set Domain=)
-    response.headers.append(
-        "Set-Cookie",
-        f"{name}=; Domain=mjserverinc.asuscomm.com; Path=/; HttpOnly; Secure; SameSite=None; "
-        f"Expires={past}; Max-Age=0"
-    )
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    # ✅ DO NOT create a new Response here
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return 
 
 
 @router.post("/request-otp")
