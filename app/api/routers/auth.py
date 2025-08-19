@@ -50,11 +50,28 @@ class UserOut(BaseModel):
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(response: Response):
-    # Remove the HttpOnly session cookie
-    # Must match the cookie key/path you used when setting it.
-    opts = _cookie_opts()
-    response.delete_cookie(key=opts["key"], path=opts["path"])
-    # 204 No Content
+    name = S.SESSION_COOKIE_NAME
+    past = "Thu, 01 Jan 1970 00:00:00 GMT"
+
+    # Host-only, Partitioned (3P cookie; Chrome CHIPS)
+    response.headers.append(
+        "Set-Cookie",
+        f"{name}=; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; "
+        f"Expires={past}; Max-Age=0"
+    )
+    # Host-only, non-Partitioned (in case an old one exists)
+    response.headers.append(
+        "Set-Cookie",
+        f"{name}=; Path=/; HttpOnly; Secure; SameSite=None; "
+        f"Expires={past}; Max-Age=0"
+    )
+    # Domain-qualified (in case a past build set Domain=)
+    response.headers.append(
+        "Set-Cookie",
+        f"{name}=; Domain=mjserverinc.asuscomm.com; Path=/; HttpOnly; Secure; SameSite=None; "
+        f"Expires={past}; Max-Age=0"
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/request-otp")
@@ -94,11 +111,11 @@ async def verify_otp(payload: VerifyOtpIn, response: Response, db: AsyncSession 
     response.set_cookie(value=token, **_cookie_opts())
     # after response.set_cookie(...)
     max_age = S.JWT_EXPIRE_MINUTES * 60
-    # response.headers.append(
-    #     "Set-Cookie",
-    #     f"{S.SESSION_COOKIE_NAME}={token}; "
-    #     f"Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age={max_age}"
-    # )
+    response.headers.append(
+        "Set-Cookie",
+        f"{S.SESSION_COOKIE_NAME}={token}; "
+        f"Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age={max_age}"
+    )
 
     return UserOut.from_model(user)
 
