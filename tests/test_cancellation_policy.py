@@ -62,7 +62,7 @@ async def test_cancellation_same_day_half_penalty(db: AsyncSession, monkeypatch)
             s, registration_id=reg_id, caller_user_id=uid, caller_is_admin=False
         )
     assert state == "canceled"
-    assert refund == fee // 2 and penalty == -(fee - fee // 2)
+    assert refund == fee / 2 and penalty == -(fee - fee / 2)
 
 
 async def test_cancellation_after_start_disallowed(db: AsyncSession, monkeypatch):

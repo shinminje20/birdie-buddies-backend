@@ -26,7 +26,7 @@ async def create_session(
     starts_at_utc: datetime,
     timezone_name: str,
     capacity: int,
-    fee_cents: float,
+    fee_cents: int,
 ) -> Session:
     s = Session(
         title=title,

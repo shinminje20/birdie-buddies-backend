@@ -12,11 +12,11 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class WalletSummary:
-    posted_cents: float
-    holds_cents: float
+    posted_cents: int
+    holds_cents: int
 
     @property
-    def available_cents(self) -> float:
+    def available_cents(self) -> int:
         return self.posted_cents - self.holds_cents
 
 

@@ -62,7 +62,7 @@ class Session(Base):
     timezone: Mapped[str] = mapped_column(sa.Text, nullable=False)  # IANA name, e.g., 'America/Vancouver'
 
     capacity: Mapped[int] = mapped_column(sa.Integer, nullable=False)
-    fee_cents: Mapped[float] = mapped_column(sa.Float, nullable=False)
+    fee_cents: Mapped[int] = mapped_column(sa.Integer, nullable=False)
 
     status: Mapped[str] = mapped_column(
         sa.Text,
@@ -147,7 +147,7 @@ class LedgerEntry(Base):
     )
 
     kind: Mapped[str] = mapped_column(sa.Text, nullable=False)  # see CheckConstraint below
-    amount_cents: Mapped[float] = mapped_column(sa.Float, nullable=False)  # + to user, - from user
+    amount_cents: Mapped[int] = mapped_column(sa.Integer, nullable=False)  # + to user, - from user
     status: Mapped[str] = mapped_column(
         sa.Text,
         nullable=False,
@@ -178,8 +178,8 @@ class Wallet(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         pg.UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True
     )
-    posted_cents: Mapped[float] = mapped_column(sa.Float, nullable=False, server_default=sa.text("0"))
-    holds_cents: Mapped[float] = mapped_column(sa.Float, nullable=False, server_default=sa.text("0"))
+    posted_cents: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default=sa.text("0"))
+    holds_cents: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default=sa.text("0"))
     updated_at: Mapped[datetime] = mapped_column(
         pg.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("now()")
     )

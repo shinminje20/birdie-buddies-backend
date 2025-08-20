@@ -51,7 +51,7 @@ async def apply_ledger_entry(
         try:
             amount_cents = int(amount_cents)
         except Exception:
-            raise ValueError("amount_cents must be integer cents")
+            raise ValueError("amount_cents must be int cents")
 
     expected = _KIND_SIGN[kind]
     if expected == +1 and amount_cents <= 0:

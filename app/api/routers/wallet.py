@@ -15,15 +15,15 @@ router = APIRouter(prefix="/wallet", tags=["wallet"])
 
 
 class WalletOut(BaseModel):
-    posted_cents: float
-    holds_cents: float
-    available_cents: float
+    posted_cents: int
+    holds_cents: int
+    available_cents: int
 
 
 class LedgerOut(BaseModel):
     id: int
     kind: str
-    amount_cents: float
+    amount_cents: int
     session_id: Optional[uuid.UUID] = None
     registration_id: Optional[uuid.UUID] = None
     created_at: str

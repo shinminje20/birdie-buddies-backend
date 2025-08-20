@@ -44,7 +44,7 @@ def upgrade() -> None:
         sa.Column("starts_at", pg.TIMESTAMP(timezone=True), nullable=False),
         sa.Column("timezone", sa.Text(), nullable=False),
         sa.Column("capacity", sa.Integer(), nullable=False),
-        sa.Column("fee_cents", sa.Float(), nullable=False),
+        sa.Column("fee_cents", sa.Integer(), nullable=False),
         sa.Column("status", sa.Text(), nullable=False, server_default=sa.text("'scheduled'")),
         sa.Column("created_at", pg.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.CheckConstraint("capacity > 0", name="ck_sessions_sessions_capacity_pos"),
@@ -91,7 +91,7 @@ def upgrade() -> None:
         sa.Column("session_id", pg.UUID(as_uuid=True), sa.ForeignKey("sessions.id"), nullable=True),
         sa.Column("registration_id", pg.UUID(as_uuid=True), sa.ForeignKey("registrations.id"), nullable=True),
         sa.Column("kind", sa.Text(), nullable=False),
-        sa.Column("amount_cents", sa.Float(), nullable=False),
+        sa.Column("amount_cents", sa.Integer(), nullable=False),
         sa.Column("status", sa.Text(), nullable=False, server_default=sa.text("'posted'")),
         sa.Column("created_at", pg.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.CheckConstraint(
@@ -108,8 +108,8 @@ def upgrade() -> None:
     op.create_table(
         "wallets",
         sa.Column("user_id", pg.UUID(as_uuid=True), sa.ForeignKey("users.id"), primary_key=True, nullable=False),
-        sa.Column("posted_cents", sa.Float(), nullable=False, server_default=sa.text("0")),
-        sa.Column("holds_cents", sa.Float(), nullable=False, server_default=sa.text("0")),
+        sa.Column("posted_cents", sa.BigInteger(), nullable=False, server_default=sa.text("0")),
+        sa.Column("holds_cents", sa.BigInteger(), nullable=False, server_default=sa.text("0")),
         sa.Column("updated_at", pg.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("now()")),
     )
 

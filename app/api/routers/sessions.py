@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, conint, validator, confloat
+from pydantic import BaseModel, Field, conint, validator, conint
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...db import get_db
@@ -23,7 +23,7 @@ class SessionCreateIn(BaseModel):
     starts_at_utc: datetime
     timezone: str
     capacity: conint(gt=0)
-    fee_cents: confloat(ge=0)
+    fee_cents: conint(ge=0)
 
     @validator("starts_at_utc")
     def tzaware_and_utc(cls, v: datetime):
@@ -49,7 +49,7 @@ class SessionOut(BaseModel):
     starts_at_utc: datetime
     timezone: str
     capacity: int
-    fee_cents: float
+    fee_cents: int
     status: str
     created_at: datetime
 

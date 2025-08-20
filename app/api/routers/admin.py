@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from pydantic import BaseModel, Field, conint, constr, confloat
+from pydantic import BaseModel, Field, conint, constr
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...db import get_db
@@ -20,7 +20,7 @@ def _require_admin(u: User) -> None:
 
 class DepositIn(BaseModel):
     user_id: uuid.UUID
-    amount_cents: confloat(gt=0)  # positive only
+    amount_cents: conint(gt=0)  # positive only
     idempotency_key: Optional[constr(strip_whitespace=True, min_length=6, max_length=120)] = None
     note: Optional[str] = None  # reserved for future (a separate notes table if needed)
 
@@ -28,14 +28,14 @@ class DepositIn(BaseModel):
 class LedgerOut(BaseModel):
     id: int
     kind: str
-    amount_cents: float
+    amount_cents: int
     user_id: uuid.UUID
     session_id: Optional[uuid.UUID] = None
     registration_id: Optional[uuid.UUID] = None
     created_at: str
 
     @classmethod
-    def from_model(cls, e: LedgerEntry) -> "LedgerOut":
+    def from_model(cls, e: LedgerEntry) -> LedgerOut:
         return cls(
             id=e.id,
             kind=e.kind,
