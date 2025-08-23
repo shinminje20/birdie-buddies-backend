@@ -31,7 +31,7 @@ def _cookie_opts():
         "max_age": S.JWT_EXPIRE_MINUTES * 60,
         "domain":".mybirdies.ca",
         "path": "/",
-        # "domain": "mjserverinc.asuscomm.com",  # usually omit; host-only is safer
+        # "domain": "api.mybirdies.ca",  # usually omit; host-only is safer
     }
 
 

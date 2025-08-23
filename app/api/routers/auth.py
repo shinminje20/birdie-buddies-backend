@@ -48,29 +48,36 @@ class UserOut(BaseModel):
     def from_model(cls, u: User) -> "UserOut":
         return cls(id=str(u.id), name=u.name, email=u.email, phone=u.phone, is_admin=u.is_admin)
 
+def set_session_cookie(response: Response, value: str, max_age_seconds: int):
+    response.set_cookie(
+        key=S.SESSION_COOKIE_NAME,
+        value=value,
+        httponly=True,
+        secure=True,                 # HTTPS only
+        samesite="lax",              # same-site (subdomains) is OK on Safari
+        domain=".mybirdies.ca",      # share across api/mybirdies.ca
+        path="/",
+        max_age=max_age_seconds,
+    )
+    
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(response: Response):
     name = S.SESSION_COOKIE_NAME
-    past = "Thu, 01 Jan 1970 00:00:00 GMT"
-    
-    response.headers.append(
-        "Set-Cookie",
-        f"{name}=; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Expires={past}; Max-Age=0"
-    )
-    # Host-only, non-Partitioned
-    response.headers.append(
-        "Set-Cookie",
-        f"{name}=; Path=/; HttpOnly; Secure; SameSite=None; Expires={past}; Max-Age=0"
-    )
-    # Domain-qualified (in case older builds used Domain=)
-    response.headers.append(
-        "Set-Cookie",
-        f"{name}=; Domain=mjserverinc.asuscomm.com; Path=/; HttpOnly; Secure; SameSite=None; Expires={past}; Max-Age=0"
-    )
+    expired = "Thu, 01 Jan 1970 00:00:00 GMT"
 
-    # ✅ DO NOT create a new Response here
-    response.status_code = status.HTTP_204_NO_CONTENT
-    return 
+    # helper to append a delete cookie line with optional Domain
+    def delete_variant(domain_attr: str | None):
+        parts = [f"{name}=", "Path=/", "HttpOnly", "Secure", "SameSite=Lax", f"Expires={expired}", "Max-Age=0"]
+        if domain_attr:
+            parts.insert(1, domain_attr)  # after name
+        response.headers.append("Set-Cookie", "; ".join(parts))
+
+    # kill common variants that might exist from previous builds
+    delete_variant(None)                         # host-only (api.mybirdies.ca)
+    delete_variant("Domain=api.mybirdies.ca")    # domain-qualified (old)
+    delete_variant("Domain=.mybirdies.ca")       # canonical going forward
+
+    return Response(status_code=204)
 
 
 @router.post("/request-otp")
@@ -106,16 +113,7 @@ async def verify_otp(payload: VerifyOtpIn, response: Response, db: AsyncSession 
         expires_in=timedelta(minutes=S.JWT_EXPIRE_MINUTES),
     )
 
-    # Set HttpOnly cookie
-    response.set_cookie(value=token, **_cookie_opts())
-    # after response.set_cookie(...)
-    max_age = S.JWT_EXPIRE_MINUTES * 60
-    response.headers.append(
-        "Set-Cookie",
-        f"{S.SESSION_COOKIE_NAME}={token}; "
-        f"Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age={max_age}"
-    )
-
+    set_session_cookie(response, token, max_age_seconds=S.JWT_EXPIRE_MINUTES * 60)
     return UserOut.from_model(user)
 
 
