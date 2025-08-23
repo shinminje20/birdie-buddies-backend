@@ -29,6 +29,7 @@ def _cookie_opts():
         "secure": True,          # always True in prod (you're behind HTTPS via Caddy)
         "samesite": "none",      # <-- cross-site requires None
         "max_age": S.JWT_EXPIRE_MINUTES * 60,
+        "domain":".mybirdies.ca",
         "path": "/",
         # "domain": "mjserverinc.asuscomm.com",  # usually omit; host-only is safer
     }

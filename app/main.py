@@ -19,7 +19,9 @@ settings = get_settings()
 setup_logging()
 ALLOWED_ORIGINS = [
     "https://birdie-buddies-a32af.web.app",
-    "https://birdie-buddies-a32af.firebaseapp.com",  
+    "https://birdie-buddies-a32af.firebaseapp.com",
+    "https://mybirdies.ca",
+    "https://www.mybirdies.ca",
     "http://localhost:5173",
 ]
 def create_app() -> FastAPI:

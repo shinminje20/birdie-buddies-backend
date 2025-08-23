@@ -1,6 +1,37 @@
-mjserverinc.asuscomm.com {
+; mjserverinc.asuscomm.com {
+;     encode zstd gzip
+;     reverse_proxy api:8000   
+;     # 선택: ACME 연락 이메일 지정(권장)
+;     tls shinminje@gmail.com
+; }
+# Optional: keep apex redirects out of Caddy (Firebase can handle www->apex)
+
+api.mybirdies.ca {
     encode zstd gzip
-    reverse_proxy api:8000   
-    # 선택: ACME 연락 이메일 지정(권장)
+    reverse_proxy api:8000
     tls shinminje@gmail.com
+
+    # Allow CORS only from your app origins
+    @preflight {
+        method OPTIONS
+        header Origin *
+        header Access-Control-Request-Method *
+    }
+    @allowed_origin expression `{http.request.header.Origin} == "https://mybirdies.ca" || {http.request.header.Origin} == "https://www.mybirdies.ca"`
+
+    handle @preflight {
+        header @allowed_origin Access-Control-Allow-Origin "{http.request.header.Origin}"
+        header @allowed_origin Access-Control-Allow-Credentials "true"
+        header @allowed_origin Access-Control-Allow-Methods "GET,POST,PUT,DELETE,OPTIONS"
+        header @allowed_origin Access-Control-Allow-Headers "Authorization,Content-Type,X-Requested-With,Idempotency-Key"
+        respond "" 204
+    }
+
+    header @allowed_origin {
+        Access-Control-Allow-Origin "{http.request.header.Origin}"
+        Access-Control-Allow-Credentials "true"
+        Vary "Origin"
+        # Security nice-to-haves
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    }
 }
