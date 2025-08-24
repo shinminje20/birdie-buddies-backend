@@ -23,6 +23,7 @@ ALLOWED_ORIGINS = [
     "https://mybirdies.ca",
     "https://www.mybirdies.ca",
     "http://localhost:5173",
+     "http://127.0.0.1:5173",
 ]
 def create_app() -> FastAPI:
     app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG)
@@ -32,7 +33,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=ALLOWED_ORIGINS,
         allow_credentials=True,
-        allow_methods=["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
+        allow_methods=["*"],
         allow_headers=["*"],                     # or ["Authorization","Content-Type", ...]
         expose_headers=["*"], 
     )
