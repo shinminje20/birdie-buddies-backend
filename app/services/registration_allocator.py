@@ -11,8 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Session as SessionModel, Registration
 from ..repos import ledger as ledger_repo
-from ..repos.outbox import add_outbox_event  # if you don't use outbox yet, you can comment these calls
+from ..repos.outbox import add_outbox_event
 from .tx import begin_serializable_tx
+from ..repos.wallets import get_wallet_summary
 
 
 async def _get_remaining_seats(db: AsyncSession, session_id: uuid.UUID) -> int:
@@ -93,6 +94,15 @@ async def process_registration_request(
     gnames = gnames[: min(2, max(0, seats - 1))]
     total_seats = 1 + len(gnames)  # host + guests
 
+    # MARK: added — affordability guard (must be able to cover ALL requested seats)
+    fee = int(sess.fee_cents)
+    required_cents = fee * total_seats
+    w = await get_wallet_summary(db, user_id)
+    if w.available_cents < required_cents:
+        # Not enough balance to hold/capture total seats — reject cleanly
+        await db.rollback()
+        return ("rejected", None, None)
+    
     # 4) Remaining seats snapshot
     remaining = await _get_remaining_seats(db, session_id)
 
@@ -205,9 +215,10 @@ async def process_registration_request(
 
     # ---------------------------
     # CASE C: Partial fit (0 < remaining < total_seats)
-    # Rule: confirm host ONLY; queue ALL guests individually at tail.
+    # Host priority, then confirm as many guests as will fit; waitlist the rest.
     # ---------------------------
-    # confirm host seat
+    # MARK: changed — previously we confirmed ONLY the host and waitlisted all guests.
+    # Now we confirm host + up to (remaining - 1) guests, each as 1-seat regs.
     host_reg = await _create_reg(is_host=True, state="confirmed", seats=1, guest_names=[], waitlist_pos=None)
     await ledger_repo.apply_ledger_entry(
         db,
@@ -227,34 +238,64 @@ async def process_registration_request(
     except Exception:
         pass
 
-    # waitlist each guest at tail (do NOT auto-confirm extra guests even if remaining > 1; fairness to global queue)
-    pos = await _next_waitlist_pos(db, session_id)
+    # Seats left after host confirmation
+    left = max(0, remaining - 1)
+
+    # Confirm as many guests as will fit (FIFO within this request)
+    confirmed_count = 0
     for name in gnames:
-        g_reg = await _create_reg(is_host=False, state="waitlisted", seats=1, guest_names=[name], waitlist_pos=pos)
+        if left <= 0:
+            break
+        g_reg = await _create_reg(is_host=False, state="confirmed", seats=1, guest_names=[name], waitlist_pos=None)
         await ledger_repo.apply_ledger_entry(
             db,
             user_id=user_id,
-            kind="hold",
-            amount_cents=fee,
+            kind="fee_capture",
+            amount_cents=-fee,
             session_id=session_id,
             registration_id=g_reg.id,
-            idempotency_key=f"hold:{g_reg.id}",
+            idempotency_key=f"cap:{g_reg.id}",
         )
         try:
             await add_outbox_event(
                 db,
                 channel=f"session:{session_id}",
-                payload={
-                    "type": "registration_waitlisted",
-                    "session_id": str(session_id),
-                    "registration_id": str(g_reg.id),
-                    "seats": 1,
-                    "waitlist_pos": pos,
-                },
+                payload={"type": "registration_confirmed", "session_id": str(session_id), "registration_id": str(g_reg.id), "seats": 1},
             )
         except Exception:
             pass
-        pos += 1
+        left -= 1
+        confirmed_count += 1
+
+    # Any remaining guests go to the tail of the waitlist with holds
+    remaining_guests = gnames[confirmed_count:]
+    if remaining_guests:
+        pos = await _next_waitlist_pos(db, session_id)
+        for idx, name in enumerate(remaining_guests):
+            g_reg = await _create_reg(is_host=False, state="waitlisted", seats=1, guest_names=[name], waitlist_pos=pos + idx)
+            await ledger_repo.apply_ledger_entry(
+                db,
+                user_id=user_id,
+                kind="hold",
+                amount_cents=fee,
+                session_id=session_id,
+                registration_id=g_reg.id,
+                idempotency_key=f"hold:{g_reg.id}",
+            )
+            try:
+                await add_outbox_event(
+                    db,
+                    channel=f"session:{session_id}",
+                    payload={
+                        "type": "registration_waitlisted",
+                        "session_id": str(session_id),
+                        "registration_id": str(g_reg.id),
+                        "seats": 1,
+                        "waitlist_pos": pos + idx,
+                    },
+                )
+            except Exception:
+                pass
 
     await db.commit()
     return ("confirmed", host_reg.id, None)
