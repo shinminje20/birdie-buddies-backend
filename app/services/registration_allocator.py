@@ -89,11 +89,22 @@ async def process_registration_request(
         return ("rejected", None, None)
 
     # 3) Normalize guest names and seat count
-    gnames = [g.strip() for g in (guest_names or []) if g and g.strip()]
-    # keep at most 2 guests overall; clamp to requested seats - 1
-    gnames = gnames[: min(2, max(0, seats - 1))]
-    total_seats = 1 + len(gnames)  # host + guests
+    # gnames = [g.strip() for g in (guest_names or []) if g and g.strip()]
+    # # keep at most 2 guests overall; clamp to requested seats - 1
+    # gnames = gnames[: min(2, max(0, seats - 1))]
+    # total_seats = 1 + len(gnames)  # host + guests
 
+    # MARK: normalize guests solely from input names, cap to 2; ignore client 'seats' for logic
+    gnames = [g.strip() for g in (guest_names or []) if g and g.strip()]
+    gnames = gnames[:2]  # at most 2 guests policy
+    total_seats = 1 + len(gnames)
+    
+    # MARK: optional: enforce client invariants (won't affect logic)
+    if seats != total_seats:
+        # don’t fail; just log or attach to your request log
+        # print(f"[alloc] seats({seats}) != 1+len(guest_names)({total_seats}); using server-derived total")
+        seats = total_seats
+    
     # MARK: added — affordability guard (must be able to cover ALL requested seats)
     fee = int(sess.fee_cents)
     required_cents = fee * total_seats
