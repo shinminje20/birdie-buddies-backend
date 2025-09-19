@@ -53,7 +53,7 @@ async def deposit(
     db: AsyncSession = Depends(get_db),
     current: User = Depends(get_current_user),
 ):
-    # _require_admin(current)
+    _require_admin(current)
 
     # Add deposit (positive to user)
     entry = await ledger_repo.apply_ledger_entry(
