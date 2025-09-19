@@ -71,23 +71,55 @@ def set_session_cookie(response: Response, request: Request, value: str, max_age
     response.set_cookie(**cookie_kwargs)
     
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(response: Response):
+async def logout(request: Request, response: Response):
     name = S.SESSION_COOKIE_NAME
     expired = "Thu, 01 Jan 1970 00:00:00 GMT"
 
-    def del_cookie(domain: str | None):
-        parts = [f"{name}=", "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=0", f"Expires={expired}"]
-        # Secure can be present or not; deletion works either way
-        parts.append("Secure")
+    host = (request.url.hostname or "").lower()
+    on_localhost = host in {"localhost", "127.0.0.1", "::1"}
+
+    def del_cookie(*, domain: str | None, secure: bool, samesite: str = "Lax", partitioned: bool = False):
+        parts = [f"{name}=", "Path=/", f"Expires={expired}", "Max-Age=0", "HttpOnly", f"SameSite={samesite}"]
         if domain:
             parts.insert(1, f"Domain={domain}")
+        if secure:
+            parts.append("Secure")
+        if partitioned:
+            parts.append("Partitioned")
         response.headers.append("Set-Cookie", "; ".join(parts))
 
-    del_cookie(None)                 # host-only (localhost or api.mybirdies.ca)
-    del_cookie(".mybirdies.ca")      # prod domain
-    del_cookie("api.mybirdies.ca")
+    # Delete cookies that could exist from dev/prod/legacy
 
-    return Response(status_code=204)
+    # Host-only cookie for current host (api.mybirdies.ca in prod, localhost in dev)
+    del_cookie(domain=None, secure=not on_localhost, samesite="Lax")
+    # Domain cookie for the whole site (current canonical in prod)
+    del_cookie(domain=".mybirdies.ca", secure=True, samesite="Lax")
+    # Legacy exact-domain cookie (if you ever set Domain=api.mybirdies.ca)
+    del_cookie(domain="api.mybirdies.ca", secure=True, samesite="Lax")
+
+    # If older builds created cross-site/partitioned cookies, clear those too:
+    del_cookie(domain=".mybirdies.ca", secure=True, samesite="None")                     # non-partitioned, None
+    del_cookie(domain=None, secure=True, samesite="None", partitioned=True)              # host-only, partitioned
+    del_cookie(domain="api.mybirdies.ca", secure=True, samesite="None", partitioned=True)
+    
+    # def del_cookie(domain: str | None):
+    #     parts = [f"{name}=", "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=0", f"Expires={expired}"]
+    #     # Secure can be present or not; deletion works either way
+    #     parts.append("Secure")
+    #     if domain:
+    #         parts.insert(1, f"Domain={domain}")
+    #     response.headers.append("Set-Cookie", "; ".join(parts))
+
+    # del_cookie(None)                 # host-only (localhost or api.mybirdies.ca)
+    # del_cookie(".mybirdies.ca")      # prod domain
+    # del_cookie("api.mybirdies.ca")
+
+    # return Response(status_code=204)
+    
+    # IMPORTANT: do NOT construct a new Response (it would drop headers)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return 
+    
 
 
 @router.post("/request-otp")
