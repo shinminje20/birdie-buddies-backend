@@ -2,17 +2,20 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
+from typing import Optional, List, Literal, Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, conint, validator, conint
+from pydantic import BaseModel, Field, field_validator, StringConstraints
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...db import get_db
 from ...models import User, Session as SessionModel
 from ...auth.deps import get_current_user
-from ...repos import sessions as sess_repo
+from ...repos import session_repo as sess_repo
 from ...services.promotion import enqueue_promotion_check
 from ...services.session_lifecycle import admin_update_session, InvalidTransition, CapacityBelowConfirmed, NotFound
+from domain.schemas.registration import AdminPreregItemIn, AdminPreregResultOut
+from services.admin_prereg_service import prereg_batch_on_create
 
 router = APIRouter(tags=["sessions"])
 
@@ -22,10 +25,11 @@ class SessionCreateIn(BaseModel):
     title: str | None = None
     starts_at_utc: datetime
     timezone: str
-    capacity: conint(gt=0)
-    fee_cents: conint(ge=0)
+    capacity: Annotated[int, StringConstraints(gt=0)]
+    fee_cents: Annotated[int, StringConstraints(gt=0)]
+    preregistrations: Optional[list[AdminPreregItemIn]] = None
 
-    @validator("starts_at_utc")
+    @field_validator("starts_at_utc")
     def tzaware_and_utc(cls, v: datetime):
         if v.tzinfo is None or v.tzinfo.utcoffset(v) is None:
             raise ValueError("starts_at_utc must be timezone-aware (UTC)")
@@ -33,7 +37,7 @@ class SessionCreateIn(BaseModel):
             raise ValueError("starts_at_utc must be in UTC (e.g., '2025-08-15T02:00:00Z')")
         return v
 
-    @validator("timezone")
+    @field_validator("timezone")
     def valid_tz(cls, v: str):
         # Ensure IANA tz is valid
         try:
@@ -73,10 +77,10 @@ class SessionWithStatsOut(SessionOut):
 
 
 class SessionPatchIn(BaseModel):
-    capacity: conint(gt=0) | None = None
+    capacity: Annotated[int, StringConstraints(gt=0)] | None = None
     status: str | None = Field(default=None, description="'scheduled' | 'closed' | 'canceled'")
 
-    @validator("status")
+    @field_validator("status")
     def valid_status(cls, v):
         if v is None:
             return v
@@ -84,6 +88,9 @@ class SessionPatchIn(BaseModel):
             raise ValueError("status must be one of 'scheduled','closed','canceled'")
         return v
 
+class SessionCreateWithPreregOut(BaseModel):
+    session: SessionOut
+    prereg_result: list[AdminPreregResultOut] = []
 
 # ---------- Helpers ----------
 def _require_admin(u: User) -> None:
@@ -101,7 +108,7 @@ def _to_stats(s: SessionModel, confirmed: int) -> SessionWithStatsOut:
 @router.get("/sessions", response_model=list[SessionWithStatsOut])
 async def list_sessions(
     db: AsyncSession = Depends(get_db),
-    limit: conint(gt=0, le=200) = Query(default=50),
+    limit: Annotated[int, StringConstraints(gt=0, le=200)] = Query(default=50),
 ):
     now_utc = datetime.now(timezone.utc)
     rows = await sess_repo.list_upcoming(db, now_utc=now_utc, limit=limit)
@@ -133,8 +140,16 @@ async def create_session(
         capacity=payload.capacity,
         fee_cents=payload.fee_cents,
     )
+    
+    results: list[AdminPreregResultOut] = []
+
+    # 2) optional preregistrations
+    items = payload.preregistrations or []
+    results: list[AdminPreregResultOut] = await prereg_batch_on_create(db, session=s, items=items)
+
     await db.commit()
-    return SessionOut.from_model(s)
+    return SessionCreateWithPreregOut(session=SessionOut.from_model(s), prereg_result=results)
+    # return SessionOut.from_model(s)
 
 @router.patch("/admin/sessions/{session_id}", response_model=SessionOut)
 async def patch_session(
