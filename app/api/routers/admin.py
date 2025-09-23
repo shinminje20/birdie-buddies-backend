@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...db import get_db
 from ...models import User, LedgerEntry
 from ...auth.deps import get_current_user
-from ...repos import ledger as ledger_repo
+from ...repos import ledger_repo as ledger_repo
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
