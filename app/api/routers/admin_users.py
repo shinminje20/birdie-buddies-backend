@@ -1,6 +1,7 @@
 from __future__ import annotations
 import uuid
 from typing import Optional, List, Literal
+from datetime import datetime, timezone
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -97,7 +98,13 @@ async def admin_list_users(
     _require_admin(current)
 
     # base query
-    cond = []
+    # cond = []
+    # if q:
+    #     qs = f"%{q.lower()}%"
+    #     cond.append(sa.or_(func.lower(User.name).like(qs), func.lower(User.email).like(qs)))
+    
+    # List (add User.deleted_at.is_(None) to the WHERE)
+    cond = [User.deleted_at.is_(None)]
     if q:
         qs = f"%{q.lower()}%"
         cond.append(sa.or_(func.lower(User.name).like(qs), func.lower(User.email).like(qs)))
@@ -147,6 +154,9 @@ async def admin_get_user(
         )
         .join(Wallet, Wallet.user_id == User.id, isouter=True)
         .where(User.id == user_id)
+        
+        # If don't want to let the Admin look up deleted account, Uncomment this, and replace with above.
+        # .where(User.id == user_id, User.deleted_at.is_(None))
     )
     u = urow.first()
     if not u:
@@ -268,4 +278,39 @@ async def admin_update_user(
         )
 
     # 204 No Content; admin UI should refetch the detail view
+    return
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_soft_delete_user(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current: User = Depends(get_current_user),
+):
+    _require_admin(current)
+
+    # Fetch target
+    row = await db.execute(select(User).where(User.id == user_id))
+    target: User | None = row.scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Last-admin guard (cannot delete final admin)
+    if target.is_admin:
+        other_admins = (await db.execute(
+            select(func.count()).select_from(User).where(
+                User.is_admin.is_(True),
+                User.id != target.id,
+                # If you track active-only admins, uncomment:
+                User.status == "active",
+                # User.deleted_at.is_(None),
+            )
+        )).scalar_one()
+        if other_admins == 0:
+            raise HTTPException(status_code=409, detail="Cannot delete the last remaining admin")
+
+    # Soft delete: mark disabled + deleted_at
+    target.status = "disabled"
+    target.deleted_at = datetime.now(timezone.utc)
+
+    await db.commit()
     return

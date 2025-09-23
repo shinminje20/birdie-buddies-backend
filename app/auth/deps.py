@@ -53,4 +53,8 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
     user = result.scalar_one_or_none()
     if not user or user.status != "active":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive or not found")
+    
+    if user.deleted_at is not None or user.status != "active":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="This account is disabled")
+    
     return user
