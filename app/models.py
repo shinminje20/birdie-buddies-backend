@@ -45,9 +45,19 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         pg.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("now()")
     )
+    
+    # MARK: added — profile picture url (served by /static or CDN later)
+    avatar_url: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
 
+    # MARK: added — soft delete marker
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        pg.TIMESTAMP(timezone=True), nullable=True
+    )
+    
     __table_args__ = (
         CheckConstraint("status in ('active','disabled')", name="users_status"),
+        # MARK: optional index for faster admin filtering; harmless if you skip
+        Index("ix_users_deleted_at", "deleted_at"),
     )
 
 
@@ -160,8 +170,9 @@ class LedgerEntry(Base):
     )
 
     __table_args__ = (
+        # MARK: changed — allow 'hold' (keep 'fee_hold' for backward compatibility)
         CheckConstraint(
-            "kind in ('deposit_in','fee_hold','fee_capture','hold_release','refund','penalty')",
+            "kind in ('deposit_in','fee_hold','hold','fee_capture','hold_release','refund','penalty')",
             name="ledger_kind",
         ),
         CheckConstraint("status in ('posted','void')", name="ledger_status"),

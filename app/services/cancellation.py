@@ -10,7 +10,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Registration, Session as SessionModel
-from ..repos import ledger as ledger_repo
+from ..repos import ledger_repo as ledger_repo
 from .promotion import enqueue_promotion_check
 from ..repos.outbox import add_outbox_event
 from .tx import begin_serializable_tx

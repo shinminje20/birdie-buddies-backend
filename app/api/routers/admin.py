@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...db import get_db
 from ...models import User, LedgerEntry
 from ...auth.deps import get_current_user
-from ...repos import ledger as ledger_repo
+from ...repos import ledger_repo as ledger_repo
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -20,7 +20,7 @@ def _require_admin(u: User) -> None:
 
 class DepositIn(BaseModel):
     user_id: uuid.UUID
-    amount_cents: conint(gt=0)  # positive only
+    amount_cents: int
     idempotency_key: Optional[constr(strip_whitespace=True, min_length=6, max_length=120)] = None
     note: Optional[str] = None  # reserved for future (a separate notes table if needed)
 
@@ -53,7 +53,7 @@ async def deposit(
     db: AsyncSession = Depends(get_db),
     current: User = Depends(get_current_user),
 ):
-    # _require_admin(current)
+    _require_admin(current)
 
     # Add deposit (positive to user)
     entry = await ledger_repo.apply_ledger_entry(

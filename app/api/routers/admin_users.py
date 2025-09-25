@@ -1,12 +1,14 @@
 from __future__ import annotations
 import uuid
-from typing import Optional, List
+from typing import Optional, List, Literal, Annotated
+from datetime import datetime, timezone
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, StringConstraints
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from ...auth.deps import get_current_user
 from ...db import get_db
@@ -74,6 +76,14 @@ class AdminUserDetailOut(BaseModel):
     ledger: List[AdminLedgerRow]
     registrations: List[AdminRegistrationRow]
 
+class AdminUserUpdateIn(BaseModel):
+    name: Optional[Annotated[str, StringConstraints(min_length=2, strip_whitespace=True)]] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[Annotated[str, StringConstraints(min_length=5, max_length=40, strip_whitespace=True)]] = None
+    status: Optional[Literal["active", "disabled"]] = None
+    is_admin: Optional[bool] = None
+
+
 
 # ---------- Endpoints ----------
 
@@ -88,7 +98,13 @@ async def admin_list_users(
     _require_admin(current)
 
     # base query
-    cond = []
+    # cond = []
+    # if q:
+    #     qs = f"%{q.lower()}%"
+    #     cond.append(sa.or_(func.lower(User.name).like(qs), func.lower(User.email).like(qs)))
+    
+    # List (add User.deleted_at.is_(None) to the WHERE)
+    cond = [User.deleted_at.is_(None)]
     if q:
         qs = f"%{q.lower()}%"
         cond.append(sa.or_(func.lower(User.name).like(qs), func.lower(User.email).like(qs)))
@@ -138,6 +154,9 @@ async def admin_get_user(
         )
         .join(Wallet, Wallet.user_id == User.id, isouter=True)
         .where(User.id == user_id)
+        
+        # If don't want to let the Admin look up deleted account, Uncomment this, and replace with above.
+        # .where(User.id == user_id, User.deleted_at.is_(None))
     )
     u = urow.first()
     if not u:
@@ -199,3 +218,99 @@ async def admin_get_user(
         ledger=ledger,
         registrations=regs,
     )
+
+@router.patch("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_update_user(
+    user_id: uuid.UUID,
+    payload: AdminUserUpdateIn,
+    db: AsyncSession = Depends(get_db),
+    current: User = Depends(get_current_user),
+):
+    _require_admin(current)
+
+    # Fetch target user
+    row = await db.execute(select(User).where(User.id == user_id))
+    target: User | None = row.scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # Self-demotion guard
+    if payload.is_admin is not None and current.id == target.id and payload.is_admin is False:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot demote yourself")
+
+    # Apply allowed fields
+    if payload.name is not None:
+        target.name = payload.name.strip()
+    if payload.email is not None:
+        target.email = payload.email.lower()
+    if payload.phone is not None:
+        target.phone = payload.phone.strip()
+    if payload.status is not None:
+        target.status = payload.status
+    if payload.is_admin is not None:
+        # Last-admin protection if turning off admin
+        if target.is_admin and payload.is_admin is False:
+            # Count other admins (active & not deleted if you track deleted_at)
+            q = select(func.count()).select_from(User).where(
+                User.is_admin.is_(True),
+                User.id != target.id,
+                # If you have these columns:
+                User.status == "active",
+                # User.deleted_at.is_(None),
+            )
+            count_other_admins = (await db.execute(q)).scalar_one()
+            if count_other_admins == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Cannot demote the last remaining admin",
+                )
+        target.is_admin = bool(payload.is_admin)
+
+    # Commit with conflict handling (unique email/phone)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        # Surface as 409 Conflict without leaking DB internals
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email or phone already in use",
+        )
+
+    # 204 No Content; admin UI should refetch the detail view
+    return
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_soft_delete_user(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current: User = Depends(get_current_user),
+):
+    _require_admin(current)
+
+    # Fetch target
+    row = await db.execute(select(User).where(User.id == user_id))
+    target: User | None = row.scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Last-admin guard (cannot delete final admin)
+    if target.is_admin:
+        other_admins = (await db.execute(
+            select(func.count()).select_from(User).where(
+                User.is_admin.is_(True),
+                User.id != target.id,
+                # If you track active-only admins, uncomment:
+                User.status == "active",
+                # User.deleted_at.is_(None),
+            )
+        )).scalar_one()
+        if other_admins == 0:
+            raise HTTPException(status_code=409, detail="Cannot delete the last remaining admin")
+
+    # Soft delete: mark disabled + deleted_at
+    target.status = "disabled"
+    target.deleted_at = datetime.now(timezone.utc)
+
+    await db.commit()
+    return

@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 # IMPORTANT: import engine/SessionLocal only after config is loaded
 from app.db import engine, SessionLocal
 from app.repos import users as users_repo
-from app.repos import ledger as ledger_repo
-from app.repos import sessions as sess_repo
+from backend.app.repos import ledger_repo as ledger_repo
+from backend.app.repos import session_repo as sess_repo
 from redis.asyncio import from_url
 from app.config import get_settings
 
