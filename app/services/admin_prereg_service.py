@@ -1,11 +1,11 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
-from app.domain.errors import *
-from app.domain.schemas.registration import AdminPreregItemIn, AdminPreregResultOut
-from repos import ledger_repo
-from repos.wallets import ensure_and_lock_wallet, get_wallet_summary
-from models import User, Session as SessionModel, Registration
+from ..domain.errors import *
+from ..domain.schemas.registration import AdminPreregItemIn, AdminPreregResultOut
+from ..repos import ledger_repo
+from ..repos.wallets import ensure_and_lock_wallet, get_wallet_summary
+from ..models import User, Session as SessionModel, Registration
 
 async def prereg_batch_on_create(db: AsyncSession, *, session, items: list[AdminPreregItemIn]) -> list[AdminPreregResultOut]:
     results = []

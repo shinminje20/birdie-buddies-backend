@@ -39,7 +39,7 @@ REQ_TTL_SEC   = 24 * 60 * 60
 
 
 from pydantic import BaseModel, Field
-from domain.schemas.registration import RegisterIn, RegisterEnqueuedOut, RegRowOut, RequestStatusOut, GuestsUpdateIn, GuestsUpdateOut, CancelOut
+from ...domain.schemas.registration import RegisterIn, RegisterEnqueuedOut, RegRowOut, RequestStatusOut, GuestsUpdateIn, GuestsUpdateOut, CancelOut
 
 @router.get("/me/registrations", response_model=list[RegRowOut])
 async def my_registrations(

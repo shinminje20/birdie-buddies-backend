@@ -14,8 +14,8 @@ from ...auth.deps import get_current_user
 from ...repos import session_repo as sess_repo
 from ...services.promotion import enqueue_promotion_check
 from ...services.session_lifecycle import admin_update_session, InvalidTransition, CapacityBelowConfirmed, NotFound
-from domain.schemas.registration import AdminPreregItemIn, AdminPreregResultOut
-from services.admin_prereg_service import prereg_batch_on_create
+from ...domain.schemas.registration import AdminPreregItemIn, AdminPreregResultOut
+from ...services.admin_prereg_service import prereg_batch_on_create
 
 router = APIRouter(tags=["sessions"])
 
@@ -25,8 +25,8 @@ class SessionCreateIn(BaseModel):
     title: str | None = None
     starts_at_utc: datetime
     timezone: str
-    capacity: Annotated[int, StringConstraints(gt=0)]
-    fee_cents: Annotated[int, StringConstraints(gt=0)]
+    capacity: Annotated[int, Field(ge=0)]        # ✅ numeric constraint
+    fee_cents: Annotated[int, Field(ge=0)]
     preregistrations: Optional[list[AdminPreregItemIn]] = None
 
     @field_validator("starts_at_utc")
@@ -77,7 +77,7 @@ class SessionWithStatsOut(SessionOut):
 
 
 class SessionPatchIn(BaseModel):
-    capacity: Annotated[int, StringConstraints(gt=0)] | None = None
+    capacity: Annotated[int, StringConstraints(min_length=0)] | None = None
     status: str | None = Field(default=None, description="'scheduled' | 'closed' | 'canceled'")
 
     @field_validator("status")
@@ -108,7 +108,7 @@ def _to_stats(s: SessionModel, confirmed: int) -> SessionWithStatsOut:
 @router.get("/sessions", response_model=list[SessionWithStatsOut])
 async def list_sessions(
     db: AsyncSession = Depends(get_db),
-    limit: Annotated[int, StringConstraints(gt=0, le=200)] = Query(default=50),
+    limit: Annotated[int, StringConstraints(min_length=0, max_length=200)] = Query(default=50),
 ):
     now_utc = datetime.now(timezone.utc)
     rows = await sess_repo.list_upcoming(db, now_utc=now_utc, limit=limit)
@@ -125,7 +125,7 @@ async def get_session(session_id: uuid.UUID, db: AsyncSession = Depends(get_db))
 
 
 # ---------- Admin ----------
-@router.post("/admin/sessions", response_model=SessionOut)
+@router.post("/admin/sessions", response_model=SessionCreateWithPreregOut)
 async def create_session(
     payload: SessionCreateIn,
     db: AsyncSession = Depends(get_db),
@@ -148,7 +148,11 @@ async def create_session(
     results: list[AdminPreregResultOut] = await prereg_batch_on_create(db, session=s, items=items)
 
     await db.commit()
-    return SessionCreateWithPreregOut(session=SessionOut.from_model(s), prereg_result=results)
+    return SessionCreateWithPreregOut(
+        session=SessionOut.from_model(s),
+        prereg_result=results,
+    )
+    # return SessionCreateWithPreregOut(session=SessionOut.from_model(s), prereg_result=results)
     # return SessionOut.from_model(s)
 
 @router.patch("/admin/sessions/{session_id}", response_model=SessionOut)

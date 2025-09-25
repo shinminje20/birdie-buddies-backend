@@ -1,11 +1,11 @@
 import uuid
-import datetime
+from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator, model_validator, conint, StringConstraints
 from typing import Optional, List, Literal, Annotated
 
 class RegisterIn(BaseModel):
-    seats: Annotated[int, StringConstraints(ge=1, le=3)]
+    seats: Annotated[int, StringConstraints(min_length=1, max_length=3)]
     guest_names: List[str] = Field(default_factory=list, description="0..2 guest names")
 
     @field_validator("guest_names")
@@ -73,7 +73,7 @@ class GuestsUpdateOut(BaseModel):
     
 class AdminPreregItemIn(BaseModel):
     user_id: uuid.UUID
-    seats: Annotated[int, StringConstraints(ge=1)]
+    seats: Annotated[int, Field(ge=1)]
     guest_names: List[str] = Field(default_factory=list, description="0..2 guest names")
     idempotency_key: Optional[Annotated[str, StringConstraints(strip_whitespace=True, min_length=6, max_length=120)]] = None
 

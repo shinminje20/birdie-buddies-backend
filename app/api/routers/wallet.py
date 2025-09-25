@@ -9,7 +9,7 @@ from ...db import get_db
 from ...models import User, LedgerEntry
 from ...auth.deps import get_current_user
 from ...repos.wallets import get_wallet_summary
-from ...repos import ledger as ledger_repo
+from ...repos import ledger_repo as ledger_repo
 
 router = APIRouter(prefix="/wallet", tags=["wallet"])
 

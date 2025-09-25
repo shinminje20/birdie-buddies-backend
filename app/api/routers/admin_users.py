@@ -1,11 +1,11 @@
 from __future__ import annotations
 import uuid
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Annotated
 from datetime import datetime, timezone
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, EmailStr, constr
+from pydantic import BaseModel, EmailStr, StringConstraints
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
@@ -77,9 +77,9 @@ class AdminUserDetailOut(BaseModel):
     registrations: List[AdminRegistrationRow]
 
 class AdminUserUpdateIn(BaseModel):
-    name: Optional[constr(strip_whitespace=True, min_length=2)] = None
+    name: Optional[Annotated[str, StringConstraints(min_length=2, strip_whitespace=True)]] = None
     email: Optional[EmailStr] = None
-    phone: Optional[constr(strip_whitespace=True, min_length=5, max_length=40)] = None
+    phone: Optional[Annotated[str, StringConstraints(min_length=5, max_length=40, strip_whitespace=True)]] = None
     status: Optional[Literal["active", "disabled"]] = None
     is_admin: Optional[bool] = None
 
