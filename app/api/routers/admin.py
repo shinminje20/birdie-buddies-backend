@@ -20,7 +20,7 @@ def _require_admin(u: User) -> None:
 
 class DepositIn(BaseModel):
     user_id: uuid.UUID
-    amount_cents: conint(gt=0)  # positive only
+    amount_cents: int
     idempotency_key: Optional[constr(strip_whitespace=True, min_length=6, max_length=120)] = None
     note: Optional[str] = None  # reserved for future (a separate notes table if needed)
 
