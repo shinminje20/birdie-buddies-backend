@@ -1,8 +1,8 @@
 from __future__ import annotations
 import uuid
-from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from pydantic import BaseModel, Field, conint
+from typing import Optional, List, Annotated
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...db import get_db
@@ -50,7 +50,7 @@ async def my_wallet(current: User = Depends(get_current_user), db: AsyncSession 
 async def my_ledger(
     current: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    limit: conint(gt=0, le=200) = 50,
+    limit: Annotated[int, Field(gt=0, le=200)] = 50,
     before_id: Optional[int] = Query(default=None),
 ):
     rows = await ledger_repo.list_ledger_for_user(db, user_id=current.id, limit=limit, before_id=before_id)

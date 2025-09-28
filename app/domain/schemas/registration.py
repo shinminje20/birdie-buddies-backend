@@ -1,11 +1,11 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator, model_validator, conint, StringConstraints
+from pydantic import BaseModel, Field, field_validator, model_validator, StringConstraints
 from typing import Optional, List, Literal, Annotated
 
 class RegisterIn(BaseModel):
-    seats: Annotated[int, StringConstraints(min_length=1, max_length=3)]
+    seats: Annotated[int, Field(ge=1, le=3)]
     guest_names: List[str] = Field(default_factory=list, description="0..2 guest names")
 
     @field_validator("guest_names")

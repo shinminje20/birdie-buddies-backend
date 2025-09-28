@@ -77,7 +77,7 @@ class SessionWithStatsOut(SessionOut):
 
 
 class SessionPatchIn(BaseModel):
-    capacity: Annotated[int, StringConstraints(min_length=0)] | None = None
+    capacity: Annotated[int, Field(ge=0)] | None = None
     status: str | None = Field(default=None, description="'scheduled' | 'closed' | 'canceled'")
 
     @field_validator("status")
@@ -108,7 +108,7 @@ def _to_stats(s: SessionModel, confirmed: int) -> SessionWithStatsOut:
 @router.get("/sessions", response_model=list[SessionWithStatsOut])
 async def list_sessions(
     db: AsyncSession = Depends(get_db),
-    limit: Annotated[int, StringConstraints(min_length=0, max_length=200)] = Query(default=50),
+    limit: Annotated[int, Field(ge=0, le=200)] = Query(default=50),
 ):
     now_utc = datetime.now(timezone.utc)
     rows = await sess_repo.list_upcoming(db, now_utc=now_utc, limit=limit)

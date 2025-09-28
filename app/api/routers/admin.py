@@ -1,8 +1,8 @@
 from __future__ import annotations
 import uuid
-from typing import Optional, List
+from typing import Optional, List, Annotated
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from pydantic import BaseModel, Field, conint, constr
+from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...db import get_db
@@ -21,7 +21,7 @@ def _require_admin(u: User) -> None:
 class DepositIn(BaseModel):
     user_id: uuid.UUID
     amount_cents: int
-    idempotency_key: Optional[constr(strip_whitespace=True, min_length=6, max_length=120)] = None
+    idempotency_key: Optional[Annotated[str, StringConstraints(min_length=6, max_length=120, strip_whitespace=True)]] = None
     note: Optional[str] = None  # reserved for future (a separate notes table if needed)
 
 
@@ -73,7 +73,7 @@ async def ledger_admin(
     current: User = Depends(get_current_user),
     user_id: Optional[uuid.UUID] = Query(default=None),
     session_id: Optional[uuid.UUID] = Query(default=None),
-    limit: conint(gt=0, le=500) = 100,
+    limit: Annotated[int, Field(gt=0, le=500)] = 100,
     before_id: Optional[int] = Query(default=None),
 ):
     _require_admin(current)
