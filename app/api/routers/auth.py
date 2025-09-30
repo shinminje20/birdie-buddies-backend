@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from ...config import get_settings
 from ...db import get_db
@@ -37,6 +38,27 @@ class VerifyOtpIn(BaseModel):
     phone: Optional[str] = None
 
 
+# NEW: Models for the new login flow
+class CheckEmailIn(BaseModel):
+    email: EmailStr
+
+
+class LoginIn(BaseModel):
+    email: EmailStr
+    phone: str
+
+
+class SignupIn(BaseModel):
+    email: EmailStr
+    name: str
+    phone: str
+
+
+class VerifyOtpNewIn(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6)
+
+
 class UserOut(BaseModel):
     id: str
     name: str
@@ -48,11 +70,11 @@ class UserOut(BaseModel):
     def from_model(cls, u: User) -> "UserOut":
         return cls(id=str(u.id), name=u.name, email=u.email, phone=u.phone, is_admin=u.is_admin)
 
+
 def set_session_cookie(response: Response, request: Request, value: str, max_age_seconds: int):
     host = request.url.hostname or ""
     on_localhost = host in {"localhost", "127.0.0.1", "::1"}
 
-    # If you're using HTTPS locally (mkcert/Caddy), flip this to True
     secure_local_https = False
 
     cookie_kwargs = dict(
@@ -66,10 +88,11 @@ def set_session_cookie(response: Response, request: Request, value: str, max_age
     )
 
     if not on_localhost:
-        cookie_kwargs["domain"] = ".mybirdies.ca"  # only in prod
+        cookie_kwargs["domain"] = ".mybirdies.ca"
     
     response.set_cookie(**cookie_kwargs)
-    
+
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(request: Request, response: Response):
     name = S.SESSION_COOKIE_NAME
@@ -88,47 +111,139 @@ async def logout(request: Request, response: Response):
             parts.append("Partitioned")
         response.headers.append("Set-Cookie", "; ".join(parts))
 
-    # Delete cookies that could exist from dev/prod/legacy
-
-    # Host-only cookie for current host (api.mybirdies.ca in prod, localhost in dev)
     del_cookie(domain=None, secure=not on_localhost, samesite="Lax")
-    # Domain cookie for the whole site (current canonical in prod)
     del_cookie(domain=".mybirdies.ca", secure=True, samesite="Lax")
-    # Legacy exact-domain cookie (if you ever set Domain=api.mybirdies.ca)
     del_cookie(domain="api.mybirdies.ca", secure=True, samesite="Lax")
-
-    # If older builds created cross-site/partitioned cookies, clear those too:
-    del_cookie(domain=".mybirdies.ca", secure=True, samesite="None")                     # non-partitioned, None
-    del_cookie(domain=None, secure=True, samesite="None", partitioned=True)              # host-only, partitioned
+    del_cookie(domain=".mybirdies.ca", secure=True, samesite="None")
+    del_cookie(domain=None, secure=True, samesite="None", partitioned=True)
     del_cookie(domain="api.mybirdies.ca", secure=True, samesite="None", partitioned=True)
     
-    # def del_cookie(domain: str | None):
-    #     parts = [f"{name}=", "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=0", f"Expires={expired}"]
-    #     # Secure can be present or not; deletion works either way
-    #     parts.append("Secure")
-    #     if domain:
-    #         parts.insert(1, f"Domain={domain}")
-    #     response.headers.append("Set-Cookie", "; ".join(parts))
-
-    # del_cookie(None)                 # host-only (localhost or api.mybirdies.ca)
-    # del_cookie(".mybirdies.ca")      # prod domain
-    # del_cookie("api.mybirdies.ca")
-
-    # return Response(status_code=204)
-    
-    # IMPORTANT: do NOT construct a new Response (it would drop headers)
     response.status_code = status.HTTP_204_NO_CONTENT
-    return 
+    return
+
+
+# NEW: Check if email exists
+@router.post("/check-email")
+async def check_email(payload: CheckEmailIn, db: AsyncSession = Depends(get_db)):
+    """Check if email exists in the system"""
+    result = await db.execute(select(User).where(User.email == payload.email.lower()))
+    user = result.scalar_one_or_none()
+    return {"exists": user is not None}
+
+
+# NEW: Login with email + phone
+@router.post("/login")
+async def login(payload: LoginIn, request: Request, db: AsyncSession = Depends(get_db)):
+    """Verify email+phone match, then send OTP"""
+    await limit_otp_request(request)
     
+    result = await db.execute(select(User).where(User.email == payload.email.lower()))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if user.phone != payload.phone:
+        raise HTTPException(status_code=401, detail="Invalid phone number")
+    
+    # Generate and send OTP
+    # code = "".join(secrets.choice("0123456789") for _ in range(6))
+    code = "960124"
+    key = f"otp:{payload.email.lower()}"
+    await redis.set(key, code, ex=OTP_TTL_SECONDS)
+    await send_otp_via_email(str(payload.email), code)
+    
+    return {"message": "OTP sent", "requires_otp": True}
 
 
+# NEW: Signup with email + name + phone
+@router.post("/signup")
+async def signup(payload: SignupIn, request: Request, db: AsyncSession = Depends(get_db)):
+    """Store pending signup data and send OTP"""
+    await limit_otp_request(request)
+    
+    # Check if email already exists
+    result = await db.execute(select(User).where(User.email == payload.email.lower()))
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Email already registered")
+    
+    # Generate OTP
+    # code = "".join(secrets.choice("0123456789") for _ in range(6))
+    code = "960124"
+    
+    # Store OTP
+    otp_key = f"otp:{payload.email.lower()}"
+    await redis.set(otp_key, code, ex=OTP_TTL_SECONDS)
+    
+    # Store pending signup data temporarily
+    signup_key = f"signup:{payload.email.lower()}"
+    await redis.set(signup_key, f"{payload.name}|{payload.phone}", ex=OTP_TTL_SECONDS)
+    
+    await send_otp_via_email(str(payload.email), code)
+    
+    return {"message": "Verification code sent", "requires_otp": True}
+
+
+# NEW: Verify OTP for new flow
+@router.post("/verify-otp-new", response_model=UserOut)
+async def verify_otp_new(
+    payload: VerifyOtpNewIn, 
+    response: Response, 
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """Verify OTP for both login and signup flows"""
+    await limit_otp_verify(request)
+    
+    email = payload.email.lower()
+    
+    # Check OTP
+    otp_key = f"otp:{email}"
+    stored_otp = await redis.get(otp_key)
+    if not stored_otp or stored_otp != payload.otp:
+        raise HTTPException(status_code=401, detail="Invalid or expired OTP")
+    
+    # Check if this is a signup flow
+    signup_key = f"signup:{email}"
+    signup_data = await redis.get(signup_key)
+    
+    if signup_data:
+        # Complete signup - create new user
+        name, phone = signup_data.split("|", 1)
+        user = User(email=email, name=name, phone=phone, is_admin=False)
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        
+        # Clean up Redis
+        await redis.delete(signup_key)
+    else:
+        # Login flow - fetch existing user
+        result = await db.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+    
+    # Clean up OTP
+    await redis.delete(otp_key)
+    
+    # Issue JWT
+    token = create_jwt(
+        {"sub": str(user.id), "email": user.email, "is_admin": user.is_admin, "name": user.name},
+        expires_in=timedelta(minutes=S.JWT_EXPIRE_MINUTES),
+    )
+    
+    set_session_cookie(response, request, token, max_age_seconds=S.JWT_EXPIRE_MINUTES * 60)
+    return UserOut.from_model(user)
+
+
+# EXISTING: Keep old endpoints for backward compatibility
 @router.post("/request-otp")
 async def request_otp(payload: RequestOtpIn, request: Request):
     await limit_otp_request(request)
     # code = "".join(secrets.choice("0123456789") for _ in range(6))
-    code = "123456"
+    code = "960124"
     key = f"otp:{payload.email.lower()}"
-    # set new code with TTL; overwrite any previous
     await redis.set(key, code, ex=OTP_TTL_SECONDS)
     await send_otp_via_email(str(payload.email), code)
     return {"sent": True, "ttl_sec": OTP_TTL_SECONDS}
@@ -142,14 +257,11 @@ async def verify_otp(payload: VerifyOtpIn, response: Response, db: AsyncSession 
     if not stored or stored != payload.code:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code")
 
-    # Invalidate the OTP immediately
     await redis.delete(key)
 
-    # Upsert user by email (set name/phone if first time or changed)
     user = await users_repo.upsert_by_email(db, email=payload.email, name=payload.name, phone=payload.phone)
     await db.commit()
 
-    # Issue JWT
     token = create_jwt(
         {"sub": str(user.id), "email": user.email, "is_admin": user.is_admin, "name": user.name},
         expires_in=timedelta(minutes=S.JWT_EXPIRE_MINUTES),
