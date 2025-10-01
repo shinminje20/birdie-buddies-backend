@@ -23,7 +23,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 S = get_settings()
 
-OTP_TTL_SECONDS = 5 * 60
+OTP_TTL_SECONDS = 2 * 60
 
 
 class RequestOtpIn(BaseModel):
@@ -132,10 +132,14 @@ async def check_email(payload: CheckEmailIn, db: AsyncSession = Depends(get_db))
 
 
 # NEW: Login with email + phone
-@router.post("/login")
-async def login(payload: LoginIn, request: Request, db: AsyncSession = Depends(get_db)):
-    """Verify email+phone match, then send OTP"""
-    await limit_otp_request(request)
+@router.post("/login", response_model=UserOut)
+async def login(
+    payload: LoginIn, 
+    response: Response, 
+    request: Request, 
+    db: AsyncSession = Depends(get_db)
+):
+    """Login email+phone match"""
     
     result = await db.execute(select(User).where(User.email == payload.email.lower()))
     user = result.scalar_one_or_none()
@@ -146,14 +150,14 @@ async def login(payload: LoginIn, request: Request, db: AsyncSession = Depends(g
     if user.phone != payload.phone:
         raise HTTPException(status_code=401, detail="Invalid phone number")
     
-    # Generate and send OTP
-    # code = "".join(secrets.choice("0123456789") for _ in range(6))
-    code = "960124"
-    key = f"otp:{payload.email.lower()}"
-    await redis.set(key, code, ex=OTP_TTL_SECONDS)
-    await send_otp_via_email(str(payload.email), code)
+    # Issue JWT
+    token = create_jwt(
+        {"sub": str(user.id), "email": user.email, "is_admin": user.is_admin, "name": user.name},
+        expires_in=timedelta(minutes=S.JWT_EXPIRE_MINUTES),
+    )
     
-    return {"message": "OTP sent", "requires_otp": True}
+    set_session_cookie(response, request, token, max_age_seconds=S.JWT_EXPIRE_MINUTES * 60)
+    return UserOut.from_model(user)
 
 
 # NEW: Signup with email + name + phone
@@ -217,12 +221,12 @@ async def verify_otp_new(
         
         # Clean up Redis
         await redis.delete(signup_key)
-    else:
-        # Login flow - fetch existing user
-        result = await db.execute(select(User).where(User.email == email))
-        user = result.scalar_one_or_none()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+    # else:
+    #     # Login flow - fetch existing user
+    #     result = await db.execute(select(User).where(User.email == email))
+    #     user = result.scalar_one_or_none()
+    #     if not user:
+    #         raise HTTPException(status_code=404, detail="User not found")
     
     # Clean up OTP
     await redis.delete(otp_key)
