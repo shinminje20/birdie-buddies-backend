@@ -42,9 +42,9 @@ def _compute_policy(now_utc: datetime, session_starts_utc: datetime, tz_name: st
         return (total_fee, 0)
     if now_local < start_local:
         # split 50/50; ensure integers sum correctly
-        refund = total_fee // 2
-        penalty = -(total_fee - refund)  # negative number
-        return (refund, penalty)
+        # refund = total_fee // 2
+        penalty = -(total_fee // 2)  # negative number
+        return (total_fee, penalty)
     # After start: disallow; caller will handle
     return (0, 0)
 
