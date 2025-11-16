@@ -25,7 +25,7 @@ def k_backlog(session_id: uuid.UUID) -> str:   return f"sess:{session_id}:backlo
 
 async def _ensure_group(stream: str) -> None:
     try:
-        await redis.xgroup_create(stream, GROUP, id="$", mkstream=True)
+        await redis.xgroup_create(stream, GROUP, id="0", mkstream=True)
     except Exception as e:
         if "BUSYGROUP" in str(e):
             return
