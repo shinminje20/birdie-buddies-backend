@@ -50,6 +50,19 @@ class RegRowOut(BaseModel):
     waitlist_pos: int | None = None
     state: str
 
+class MyRegistrationOut(BaseModel):
+    """Registration with session details for My Games page"""
+    registration_id: uuid.UUID
+    session_id: uuid.UUID
+    session_title: str | None = None
+    starts_at_utc: datetime
+    timezone: str
+    session_status: str  # scheduled | closed | canceled
+    seats: int
+    guest_names: list[str] | None = None
+    waitlist_pos: int | None = None
+    state: str  # confirmed | waitlisted | canceled
+
 class GuestsUpdateIn(BaseModel):
     guest_names: list[str]
 

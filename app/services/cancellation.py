@@ -1,7 +1,7 @@
 # app/services/cancellation.py
 from __future__ import annotations
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from typing import Optional, Tuple, List
 
@@ -105,9 +105,10 @@ async def cancel_registration(
         await db.rollback()
         return (0, 0, "canceled")
 
-    # Disallow after session starts
+    # Disallow cancellations within 1 hour of session start
     now_utc = _now_utc()
-    if now_utc >= sess.starts_at:
+    cancellation_cutoff = sess.starts_at - timedelta(hours=1)
+    if now_utc >= cancellation_cutoff:
         await db.rollback()
         return (0, 0, "too_late")
 

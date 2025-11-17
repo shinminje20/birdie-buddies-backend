@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional, List
 
 import sqlalchemy as sa
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, Header, status, Query
 from pydantic import BaseModel, Field, conint, validator
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,26 +39,49 @@ REQ_TTL_SEC   = 24 * 60 * 60
 
 
 from pydantic import BaseModel, Field
-from ...domain.schemas.registration import RegisterIn, RegisterEnqueuedOut, RegRowOut, RequestStatusOut, GuestsUpdateIn, GuestsUpdateOut, CancelOut
+from ...domain.schemas.registration import RegisterIn, RegisterEnqueuedOut, RegRowOut, RequestStatusOut, GuestsUpdateIn, GuestsUpdateOut, CancelOut, MyRegistrationOut
 
-@router.get("/me/registrations", response_model=list[RegRowOut])
+@router.get("/me/registrations", response_model=list[MyRegistrationOut])
 async def my_registrations(
     current: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    show_past: bool = Query(default=False, description="Show past/closed sessions instead of upcoming"),
 ):
-    rows = await db.execute(
-        select(Registration, User.name)
-        .join(User, User.id == Registration.host_user_id)
-        .where(Registration.host_user_id == current.id)
-        .order_by(Registration.created_at.desc())
-    )
-    out: list[RegRowOut] = []
-    for reg, host_name in rows.all():
+    # Build query based on whether we want past or upcoming sessions
+    if show_past:
+        # Show closed sessions (past registrations)
+        rows = await db.execute(
+            select(Registration, SessionModel)
+            .join(SessionModel, SessionModel.id == Registration.session_id)
+            .where(
+                Registration.host_user_id == current.id,
+                Registration.state != "canceled",
+                SessionModel.status == "closed",  # Only closed sessions
+            )
+            .order_by(SessionModel.starts_at.desc())  # Most recent first
+        )
+    else:
+        # Show upcoming sessions (not closed)
+        rows = await db.execute(
+            select(Registration, SessionModel)
+            .join(SessionModel, SessionModel.id == Registration.session_id)
+            .where(
+                Registration.host_user_id == current.id,
+                Registration.state != "canceled",
+                SessionModel.status != "closed",  # Exclude closed sessions
+            )
+            .order_by(SessionModel.starts_at.asc())  # Upcoming sessions first
+        )
+    out: list[MyRegistrationOut] = []
+    for reg, sess in rows.all():
         out.append(
-            RegRowOut(
+            MyRegistrationOut(
                 registration_id=reg.id,
-                host_user_id=reg.host_user_id,
-                host_name=host_name,
+                session_id=sess.id,
+                session_title=sess.title,
+                starts_at_utc=sess.starts_at,
+                timezone=sess.timezone,
+                session_status=sess.status,
                 seats=reg.seats,
                 guest_names=reg.guest_names or [],
                 waitlist_pos=reg.waitlist_pos,

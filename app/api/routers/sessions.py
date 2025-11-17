@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-from typing import Optional, List, Literal, Annotated
+from typing import Optional, Literal, Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator, StringConstraints
@@ -125,6 +125,18 @@ async def get_session(session_id: uuid.UUID, db: AsyncSession = Depends(get_db))
 
 
 # ---------- Admin ----------
+@router.get("/admin/sessions/history", response_model=list[SessionWithStatsOut])
+async def list_admin_session_history(
+    db: AsyncSession = Depends(get_db),
+    current: User = Depends(get_current_user),
+    limit: Annotated[int, Field(ge=0, le=200)] = Query(default=50),
+):
+    _require_admin(current)
+    now_utc = datetime.now(timezone.utc)
+    rows = await sess_repo.list_closed(db, now_utc=now_utc, limit=limit)
+    return [_to_stats(s, confirmed) for (s, confirmed) in rows]
+
+
 @router.post("/admin/sessions", response_model=SessionCreateWithPreregOut)
 async def create_session(
     payload: SessionCreateIn,

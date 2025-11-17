@@ -47,12 +47,30 @@ async def list_upcoming(
     now_utc: datetime,
     limit: int = 50,
 ) -> Sequence[Tuple[Session, int]]:
-    # Return (Session, confirmed_seats) for scheduled sessions in the future
+    # Return (Session, confirmed_seats) for all scheduled sessions (not closed)
+    # Shows sessions even if they've started, as long as they haven't been auto-closed
     csum = _confirmed_seats_scalar(Session.id).label("confirmed_seats")
     q = (
         select(Session, csum)
-        .where(Session.status == "scheduled", Session.starts_at >= now_utc)
+        .where(Session.status == "scheduled")
         .order_by(Session.starts_at.asc())
+        .limit(limit)
+    )
+    res = await db.execute(q)
+    return list(res.all())
+
+async def list_closed(
+    db: AsyncSession,
+    *,
+    now_utc: datetime,
+    limit: int = 50,
+) -> Sequence[Tuple[Session, int]]:
+    # Return (Session, confirmed_seats) for all closed sessions
+    csum = _confirmed_seats_scalar(Session.id).label("confirmed_seats")
+    q = (
+        select(Session, csum)
+        .where(Session.status == "closed")
+        .order_by(Session.starts_at.desc())
         .limit(limit)
     )
     res = await db.execute(q)

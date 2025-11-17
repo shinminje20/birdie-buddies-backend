@@ -1,8 +1,6 @@
 from __future__ import annotations
-from datetime import datetime, timezone
-from typing import List
-import sqlalchemy as sa
-from sqlalchemy import select, update
+from datetime import datetime, timezone, timedelta
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Session as SessionModel
@@ -13,10 +11,12 @@ from ..observability.metrics import SESSIONS_AUTOCLOSED
 
 async def close_due_sessions(db: AsyncSession, *, batch: int = 200) -> list[str]:
     """
-    Close at most `batch` sessions whose starts_at <= now and status == 'scheduled'.
-    Returns list of session_id strings closed in this run.
+    Close at most `batch` sessions whose starts_at are at least 3 hours in the past
+    (starts_at + 3h <= now) and status == 'scheduled'. Returns list of session_id
+    strings closed in this run.
     """
     now = datetime.now(timezone.utc)
+    close_cutoff = now - timedelta(hours=3)
     closed: list[str] = []
 
     # Start a fresh tx; SELECT ... FOR UPDATE SKIP LOCKED to avoid races with admins
@@ -24,7 +24,7 @@ async def close_due_sessions(db: AsyncSession, *, batch: int = 200) -> list[str]
 
     rows = await db.execute(
         select(SessionModel)
-        .where(SessionModel.status == "scheduled", SessionModel.starts_at <= now)
+        .where(SessionModel.status == "scheduled", SessionModel.starts_at <= close_cutoff)
         .order_by(SessionModel.starts_at.asc())
         .limit(batch)
         .with_for_update(skip_locked=True)
