@@ -1,7 +1,6 @@
 from __future__ import annotations
 import asyncio
 import logging
-import secrets
 from datetime import datetime, timezone, timedelta
 
 from google.oauth2.credentials import Credentials
@@ -34,62 +33,48 @@ def _lock_key() -> str:
     return "lock:gmail_watch_renewer"
 
 
-async def _acquire_lock() -> str | None:
+async def _acquire_lock() -> bool:
     """
     Acquire distributed lock to ensure only one worker instance runs.
+    Only one instance performs the check; others idle.
 
     Returns:
-        Lock token (random string) if acquired, None otherwise
+        True if lock acquired, False otherwise
     """
     # Lock TTL: 80% of check interval, minimum 10 seconds
     lock_ttl = max(10, int(CHECK_INTERVAL_SEC * 0.8))
-    # Generate unique token to identify this lock owner
-    lock_token = secrets.token_hex(16)
-
-    # Try to acquire lock with our token
-    acquired = await redis.set(_lock_key(), lock_token, ex=lock_ttl, nx=True)
-    return lock_token if acquired else None
-
-
-async def _release_lock(lock_token: str) -> None:
-    """
-    Release lock only if we still own it.
-
-    Args:
-        lock_token: The token we used to acquire the lock
-    """
-    # Lua script to atomically check and delete only if value matches
-    lua_script = """
-    if redis.call("get", KEYS[1]) == ARGV[1] then
-        return redis.call("del", KEYS[1])
-    else
-        return 0
-    end
-    """
-    await redis.eval(lua_script, 1, _lock_key(), lock_token)
+    return await redis.set(_lock_key(), "1", ex=lock_ttl, nx=True) is True
 
 
 async def run_once():
     """Check and renew Gmail watch if needed"""
-    # Acquire lock
-    lock_token = await _acquire_lock()
-    if not lock_token:
-        log.debug("Another instance is running, skipping")
+    log.info("🔄 Gmail watch renewer tick started")
+
+    # Acquire short lock; if taken, just skip this tick
+    log.debug("Attempting to acquire lock...")
+    if not await _acquire_lock():
+        log.debug("Lock already held by another instance, skipping this tick")
         return False
 
-    # Always release lock when done (success or failure)
-    try:
-        async with SessionLocal() as db:
+    log.info("✅ Lock acquired, proceeding with check")
+
+    async with SessionLocal() as db:
+        try:
             # Get active Gmail token
+            log.debug("Fetching active Gmail token from database...")
             token_record = await gmail_tokens.get_active_token(db)
 
             if not token_record:
-                log.warning("No active Gmail token found, skipping renewal check")
+                log.warning("⚠️  No active Gmail token found, skipping renewal check")
+                log.info("💡 Run OAuth flow first: GET /gmail/authorize")
                 return False
 
+            log.info(f"✅ Found Gmail token for: {token_record.email}")
+
             # Check if watch needs renewal
+            log.debug("Checking if watch needs renewal...")
             if not token_record.watch_expiration:
-                log.warning("Watch expiration not set, will attempt renewal")
+                log.warning("⚠️  Watch expiration not set, will attempt renewal")
                 needs_renewal = True
             else:
                 # Calculate time until expiration
@@ -101,24 +86,29 @@ async def run_once():
                     expiration = expiration.replace(tzinfo=timezone.utc)
 
                 time_until_expiration = expiration - now
+                hours_remaining = time_until_expiration.total_seconds() / 3600
                 needs_renewal = time_until_expiration < timedelta(hours=RENEW_THRESHOLD_HOURS)
 
                 if needs_renewal:
                     log.info(
-                        f"Gmail watch expires in {time_until_expiration.total_seconds()/3600:.1f} hours, "
-                        f"renewing now..."
+                        f"⏰ Gmail watch expires in {hours_remaining:.1f} hours "
+                        f"(threshold: {RENEW_THRESHOLD_HOURS}h), renewing now..."
                     )
                 else:
-                    log.debug(
-                        f"Gmail watch expires in {time_until_expiration.total_seconds()/3600:.1f} hours, "
-                        f"no renewal needed yet"
+                    log.info(
+                        f"✅ Gmail watch still valid for {hours_remaining:.1f} hours "
+                        f"(threshold: {RENEW_THRESHOLD_HOURS}h), no renewal needed"
                     )
 
             if not needs_renewal:
+                log.info("📌 Skipping renewal check until next tick")
                 return False
+
+            log.info("🔧 Starting Gmail watch renewal...")
 
             # Renew the watch
             # Create credentials from refresh token
+            log.debug("Creating OAuth credentials from refresh token...")
             credentials = Credentials(
                 token=None,
                 refresh_token=token_record.refresh_token,
@@ -129,18 +119,22 @@ async def run_once():
             )
 
             # Build Gmail service
+            log.debug("Building Gmail API service...")
             service = build('gmail', 'v1', credentials=credentials)
 
             # Renew watch
             if not S.GOOGLE_PUBSUB_TOPIC:
-                log.error("GOOGLE_PUBSUB_TOPIC not configured")
+                log.error("❌ GOOGLE_PUBSUB_TOPIC not configured")
                 return False
 
+            log.info(f"📤 Calling Gmail API to renew watch for topic: {S.GOOGLE_PUBSUB_TOPIC}")
             watch_request = {
                 'labelIds': ['INBOX'],
                 'topicName': S.GOOGLE_PUBSUB_TOPIC
             }
             watch_response = service.users().watch(userId='me', body=watch_request).execute()
+
+            log.debug(f"Gmail API response: {watch_response}")
 
             # Update expiration AND historyId
             expiration_ms = int(watch_response.get('expiration', 0))
@@ -148,7 +142,11 @@ async def run_once():
             watch_expiration = datetime.fromtimestamp(expiration_ms / 1000, tz=timezone.utc) if expiration_ms else None
             history_id = watch_response.get('historyId')
 
+            log.info(f"📊 New watch expiration: {watch_expiration}")
+            log.info(f"📊 New historyId: {history_id}")
+
             # Update database
+            log.debug("Updating database with new watch info...")
             await gmail_tokens.update_watch_expiration(db, watch_expiration)
             if history_id:
                 await gmail_tokens.update_history_id(db, history_id)
@@ -161,27 +159,34 @@ async def run_once():
 
             return True
 
-    except Exception as e:
-        log.error(f"Failed to renew Gmail watch: {str(e)}", exc_info=True)
-        return False
-    finally:
-        # Release lock only if we still own it
-        await _release_lock(lock_token)
+        except Exception as e:
+            log.error(f"Failed to renew Gmail watch: {str(e)}", exc_info=True)
+            return False
 
 
 async def run_forever():
     """Run the Gmail watch renewal check periodically"""
+    log.info("=" * 60)
+    log.info("🚀 Gmail Watch Renewer Worker Starting...")
+    log.info("=" * 60)
+    log.info(f"⏱️  Check interval: {CHECK_INTERVAL_SEC/60:.1f} minutes")
+    log.info(f"⏰ Renewal threshold: {RENEW_THRESHOLD_HOURS} hours before expiration")
+    log.info(f"🔒 Lock TTL: {max(10, int(CHECK_INTERVAL_SEC * 0.8))} seconds")
+    log.info("=" * 60)
+
     # Start heartbeat
+    log.debug("Starting heartbeat task...")
     asyncio.create_task(beat("hb:gmail_watch_renewer"))
 
-    log.info(f"Gmail watch renewer started. Checking every {CHECK_INTERVAL_SEC/3600:.1f} hours.")
+    log.info("✅ Worker initialized successfully, entering main loop")
 
     while True:
         try:
             await run_once()
         except Exception as e:
-            log.exception("gmail_watch_renewer error: %s", e)
+            log.exception("❌ gmail_watch_renewer error: %s", e)
 
+        log.debug(f"💤 Sleeping for {CHECK_INTERVAL_SEC} seconds until next check...")
         await asyncio.sleep(CHECK_INTERVAL_SEC)
 
 
