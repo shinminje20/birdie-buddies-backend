@@ -11,6 +11,7 @@ from ..db import SessionLocal
 from ..redis_client import redis
 from ..repos import gmail_tokens
 from ..observability.heartbeat import beat
+from ..observability.logging import setup_logging
 
 S = get_settings()
 log = logging.getLogger("worker.gmail_watch_renewer")
@@ -191,6 +192,7 @@ async def run_forever():
 
 
 def main():
+    setup_logging()
     asyncio.run(run_forever())
 
 
