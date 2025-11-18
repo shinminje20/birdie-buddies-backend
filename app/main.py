@@ -15,6 +15,7 @@ from .api.routers import metrics as metrics_router
 from .api.routers import admin_users as admin_users_router
 from .api.routers import gmail as gmail_router
 from .api.routers import pubsub as pubsub_router
+from .api.routers import oauth2 as oauth2_router
 import uvicorn
 
 settings = get_settings()
@@ -55,6 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_users_router.router)
     app.include_router(gmail_router.router)
     app.include_router(pubsub_router.router)
+    app.include_router(oauth2_router.router)
     
     return app
 
