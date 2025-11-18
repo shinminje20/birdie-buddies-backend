@@ -68,7 +68,8 @@ async def handle_gmail_notification(
 
         # Extract email address and historyId from notification
         email_address = notification_data.get('emailAddress')
-        history_id = notification_data.get('historyId')
+        # Convert historyId to string (Gmail API returns it as int in JSON)
+        history_id = str(notification_data.get('historyId'))
 
         if not email_address or not history_id:
             logger.warning(f"Missing emailAddress or historyId in notification: {notification_data}")
@@ -81,6 +82,7 @@ async def handle_gmail_notification(
             return {"status": "error", "reason": "no_token_configured"}
 
         # Check if this historyId is newer than what we've processed
+        # Both are strings now, convert to int for comparison
         if token_record.history_id and int(history_id) <= int(token_record.history_id):
             logger.info(f"Already processed historyId {history_id}, skipping")
             return {"status": "ignored", "reason": "already_processed"}
