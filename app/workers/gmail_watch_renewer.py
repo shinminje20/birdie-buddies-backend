@@ -41,8 +41,8 @@ async def _acquire_lock() -> str | None:
     Returns:
         Lock token (random string) if acquired, None otherwise
     """
-    # Lock TTL slightly less than check interval
-    lock_ttl = CHECK_INTERVAL_SEC - 60
+    # Lock TTL: 80% of check interval, minimum 10 seconds
+    lock_ttl = max(10, int(CHECK_INTERVAL_SEC * 0.8))
     # Generate unique token to identify this lock owner
     lock_token = secrets.token_hex(16)
 
