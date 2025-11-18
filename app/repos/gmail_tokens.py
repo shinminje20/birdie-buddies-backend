@@ -21,7 +21,7 @@ async def upsert_token(
     *,
     email: str,
     refresh_token: str,
-    history_id: Optional[str] = None,
+    history_id: Optional[str | int] = None,
     watch_expiration: Optional[datetime] = None,
 ) -> GmailToken:
     """Create or update the Gmail token (single account)"""
@@ -32,7 +32,8 @@ async def upsert_token(
         token.email = email.lower()
         token.refresh_token = refresh_token
         if history_id is not None:
-            token.history_id = history_id
+            # Convert to string if int (Gmail API returns historyId as int)
+            token.history_id = str(history_id)
         if watch_expiration is not None:
             token.watch_expiration = watch_expiration
         await db.flush()
@@ -42,7 +43,8 @@ async def upsert_token(
     token = GmailToken(
         email=email.lower(),
         refresh_token=refresh_token,
-        history_id=history_id,
+        # Convert to string if int (Gmail API returns historyId as int)
+        history_id=str(history_id) if history_id is not None else None,
         watch_expiration=watch_expiration,
         is_active=True,
     )
@@ -51,11 +53,12 @@ async def upsert_token(
     return token
 
 
-async def update_history_id(db: AsyncSession, history_id: str) -> None:
+async def update_history_id(db: AsyncSession, history_id: str | int) -> None:
     """Update the last processed history ID"""
     token = await get_active_token(db)
     if token:
-        token.history_id = history_id
+        # Convert to string if int (Gmail API returns historyId as int)
+        token.history_id = str(history_id)
         await db.flush()
 
 
