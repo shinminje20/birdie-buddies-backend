@@ -24,7 +24,7 @@ SCOPES = [
 
 # Check every 1 hours
 # CHECK_INTERVAL_SEC = 1 * 60 * 60
-CHECK_INTERVAL_SEC = 1 * 60 # 1min
+CHECK_INTERVAL_SEC = 4 * 60 * 60 # 4 hours
 
 # Renew if expiring within 24 hours
 RENEW_THRESHOLD_HOURS = 24
