@@ -1,10 +1,12 @@
 from __future__ import annotations
+import logging
 import re
 from decimal import Decimal, InvalidOperation
 from typing import Optional, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..repos import users as users_repo, ledger_repo
-from ..observability.logging import logger
+
+logger = logging.getLogger(__name__)
 
 
 async def is_interac_email(message: dict) -> bool:

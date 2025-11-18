@@ -1,6 +1,7 @@
 from __future__ import annotations
 import base64
 import json
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -13,8 +14,9 @@ from googleapiclient.discovery import build
 from ...config import get_settings
 from ...db import get_db
 from ...repos import gmail_tokens
-from ...services import interac_parser  # Will create this next
-from ...observability.logging import logger
+from ...services import interac_parser
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/pubsub", tags=["pubsub"])
 
