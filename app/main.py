@@ -13,6 +13,8 @@ from .middleware.request_context import RequestContextMiddleware
 from .observability.metrics import MetricsHTTPMiddleware
 from .api.routers import metrics as metrics_router
 from .api.routers import admin_users as admin_users_router
+from .api.routers import gmail as gmail_router
+from .api.routers import pubsub as pubsub_router
 import uvicorn
 
 settings = get_settings()
@@ -51,6 +53,8 @@ def create_app() -> FastAPI:
     app.include_router(events_router.router)
     app.include_router(metrics_router.router)
     app.include_router(admin_users_router.router)
+    app.include_router(gmail_router.router)
+    app.include_router(pubsub_router.router)
     
     return app
 

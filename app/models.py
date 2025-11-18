@@ -207,3 +207,18 @@ class EventsOutbox(Base):
     attempts: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default=sa.text("0"))
     error: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(pg.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("now()"))
+
+
+# ---------- GMAIL OAUTH TOKENS ----------
+class GmailToken(Base):
+    """Stores Gmail OAuth refresh tokens for watching mailbox"""
+    __tablename__ = "gmail_tokens"
+
+    id: Mapped[int] = mapped_column(sa.Integer, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(pg.CITEXT, nullable=False, unique=True)  # Gmail address being watched
+    refresh_token: Mapped[str] = mapped_column(sa.Text, nullable=False)  # OAuth refresh token - to renew watch
+    history_id: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)  # Last processed historyId
+    watch_expiration: Mapped[Optional[datetime]] = mapped_column(pg.TIMESTAMP(timezone=True), nullable=True)  # When to renew watch (~7 days)
+    is_active: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True, server_default=sa.text("true"))
+    created_at: Mapped[datetime] = mapped_column(pg.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("now()"))
+    updated_at: Mapped[datetime] = mapped_column(pg.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("now()"), onupdate=sa.text("now()"))

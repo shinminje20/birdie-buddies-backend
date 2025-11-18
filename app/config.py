@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     JWT_SECRET: str = "dev-secret-change-me"  # set a strong random value in prod
     JWT_EXPIRE_MINUTES: int = 60 * 60 * 24 * 7      # 7 days
     SESSION_COOKIE_NAME: str = "session"
+
+    # Gmail OAuth & Pub/Sub (loaded from .env)
+    GOOGLE_CLIENT_ID: str | None = None
+    GOOGLE_CLIENT_SECRET: str | None = None
+    GOOGLE_PROJECT_ID: str | None = None
+    GOOGLE_PUBSUB_TOPIC: str | None = None  # e.g., projects/YOUR_PROJECT_ID/topics/gmail-notifications
+    GMAIL_OAUTH_REDIRECT_URI: str = "http://localhost:8000/oauth2/google/callback"  # default for dev, override in prod
     
     # Rate limits (sane defaults for dev)
     RL_REG_PER_USER_10S: int = 5      # /sessions/{id}/register per user per 10s

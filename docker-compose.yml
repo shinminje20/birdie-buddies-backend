@@ -128,6 +128,24 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  worker-gmail-watch-renewer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: birdie-worker-gmail-watch-renewer
+    env_file: [./.env]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/birdiebuddies
+      SYNC_DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/birdiebuddies
+      REDIS_URL: redis://redis:6379/0
+    command: python -m app.workers.gmail_watch_renewer
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   caddy:
     image: caddy:2
     container_name: birdie-caddy

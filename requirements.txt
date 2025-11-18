@@ -23,3 +23,9 @@ greenlet==3.2.4
 
 python-json-logger==2.0.7
 prometheus-client==0.20.0
+
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
+google-cloud-pubsub
