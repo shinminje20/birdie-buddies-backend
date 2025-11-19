@@ -32,7 +32,7 @@ class User(Base):
     name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     # CITEXT gives case-insensitive unique email
     email: Mapped[str] = mapped_column(pg.CITEXT, nullable=False, unique=True)
-    phone: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True, unique=True)
+    phone: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=False)
 
     is_admin: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False, server_default=sa.text("false"))
     status: Mapped[str] = mapped_column(
