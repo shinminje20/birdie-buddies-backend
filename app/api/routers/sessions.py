@@ -74,6 +74,7 @@ class SessionOut(BaseModel):
 class SessionWithStatsOut(SessionOut):
     confirmed_seats: int
     remaining_seats: int
+    waitlist_seats: int
 
 
 class SessionPatchIn(BaseModel):
@@ -98,10 +99,10 @@ def _require_admin(u: User) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
 
 
-def _to_stats(s: SessionModel, confirmed: int) -> SessionWithStatsOut:
+def _to_stats(s: SessionModel, confirmed: int, waitlist: int) -> SessionWithStatsOut:
     remaining = max(0, s.capacity - confirmed)
     base = SessionOut.from_model(s).dict()
-    return SessionWithStatsOut(**base, confirmed_seats=confirmed, remaining_seats=remaining)
+    return SessionWithStatsOut(**base, confirmed_seats=confirmed, remaining_seats=remaining, waitlist_seats=waitlist)
 
 
 # ---------- Public ----------
@@ -112,7 +113,7 @@ async def list_sessions(
 ):
     now_utc = datetime.now(timezone.utc)
     rows = await sess_repo.list_upcoming(db, now_utc=now_utc, limit=limit)
-    return [_to_stats(s, confirmed) for (s, confirmed) in rows]
+    return [_to_stats(s, confirmed, waitlist) for (s, confirmed, waitlist) in rows]
 
 
 @router.get("/sessions/{session_id}", response_model=SessionWithStatsOut)
@@ -120,8 +121,8 @@ async def get_session(session_id: uuid.UUID, db: AsyncSession = Depends(get_db))
     row = await sess_repo.get_with_counts(db, session_id=session_id)
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="session not found")
-    s, confirmed = row
-    return _to_stats(s, confirmed)
+    s, confirmed, waitlist = row
+    return _to_stats(s, confirmed, waitlist)
 
 
 # ---------- Admin ----------
@@ -134,7 +135,7 @@ async def list_admin_session_history(
     _require_admin(current)
     now_utc = datetime.now(timezone.utc)
     rows = await sess_repo.list_closed(db, now_utc=now_utc, limit=limit)
-    return [_to_stats(s, confirmed) for (s, confirmed) in rows]
+    return [_to_stats(s, confirmed, waitlist) for (s, confirmed, waitlist) in rows]
 
 
 @router.post("/admin/sessions", response_model=SessionCreateWithPreregOut)

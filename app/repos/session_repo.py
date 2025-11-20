@@ -19,6 +19,15 @@ def _confirmed_seats_scalar(session_id_col) -> sa.sql.elements.ColumnElement[int
     )
 
 
+def _waitlist_seats_scalar(session_id_col) -> sa.sql.elements.ColumnElement[int]:
+    # SUM of waitlisted seats for a session (scalar subquery)
+    return (
+        select(func.coalesce(func.sum(Registration.seats), 0))
+        .where(Registration.session_id == session_id_col, Registration.state == "waitlisted")
+        .scalar_subquery()
+    )
+
+
 async def create_session(
     db: AsyncSession,
     *,
@@ -46,12 +55,13 @@ async def list_upcoming(
     *,
     now_utc: datetime,
     limit: int = 50,
-) -> Sequence[Tuple[Session, int]]:
-    # Return (Session, confirmed_seats) for all scheduled sessions (not closed)
+) -> Sequence[Tuple[Session, int, int]]:
+    # Return (Session, confirmed_seats, waitlist_seats) for all scheduled sessions (not closed)
     # Shows sessions even if they've started, as long as they haven't been auto-closed
     csum = _confirmed_seats_scalar(Session.id).label("confirmed_seats")
+    wsum = _waitlist_seats_scalar(Session.id).label("waitlist_seats")
     q = (
-        select(Session, csum)
+        select(Session, csum, wsum)
         .where(Session.status == "scheduled")
         .order_by(Session.starts_at.asc())
         .limit(limit)
@@ -64,11 +74,12 @@ async def list_closed(
     *,
     now_utc: datetime,
     limit: int = 50,
-) -> Sequence[Tuple[Session, int]]:
-    # Return (Session, confirmed_seats) for all closed sessions
+) -> Sequence[Tuple[Session, int, int]]:
+    # Return (Session, confirmed_seats, waitlist_seats) for all closed sessions
     csum = _confirmed_seats_scalar(Session.id).label("confirmed_seats")
+    wsum = _waitlist_seats_scalar(Session.id).label("waitlist_seats")
     q = (
-        select(Session, csum)
+        select(Session, csum, wsum)
         .where(Session.status == "closed")
         .order_by(Session.starts_at.desc())
         .limit(limit)
@@ -81,9 +92,10 @@ async def get_with_counts(
     db: AsyncSession,
     *,
     session_id: uuid.UUID,
-) -> Optional[Tuple[Session, int]]:
+) -> Optional[Tuple[Session, int, int]]:
     csum = _confirmed_seats_scalar(Session.id).label("confirmed_seats")
-    q = select(Session, csum).where(Session.id == session_id)
+    wsum = _waitlist_seats_scalar(Session.id).label("waitlist_seats")
+    q = select(Session, csum, wsum).where(Session.id == session_id)
     res = await db.execute(q)
     row = res.first()
     return row if row else None
@@ -100,7 +112,7 @@ async def update_session(
     row = await get_with_counts(db, session_id=session_id)
     if not row:
         return None
-    sess, confirmed = row
+    sess, confirmed, _ = row  # Unpack waitlist count but don't use it here
 
     if capacity is not None and capacity < confirmed:
         # Not allowed to set capacity below already-confirmed seats
