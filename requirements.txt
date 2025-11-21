@@ -29,3 +29,4 @@ google-auth-oauthlib
 google-auth-httplib2
 google-api-python-client
 google-cloud-pubsub
+twilio==9.3.4

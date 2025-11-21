@@ -3,6 +3,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import SessionLocal
+from app.models import Session as SessionModel
 from app.services.registration_allocator import process_registration_request
 from app.services import cancellation as cancel_service
 from app.services.cancellation import cancel_registration
@@ -83,4 +84,30 @@ async def test_cancellation_after_start_disallowed(db: AsyncSession, monkeypatch
             s, registration_id=reg_id, caller_user_id=uid, caller_is_admin=False
         )
     assert state == "too_late"
+    assert refund == 0 and penalty == 0
+
+
+async def test_cancellation_closed_session_disallowed(db: AsyncSession, monkeypatch):
+    tz = "America/Vancouver"
+    starts_at_utc = _dt_local(tz, 2026, 4, 5, 20)
+    sid = await mk_session(db, title="cancel-closed", starts_at_utc=starts_at_utc, tz=tz, capacity=4, fee_cents=500)
+
+    uid = await mk_user(db, "cc@x.test", "CC")
+    await deposit(db, uid, 10_000)
+    reg_id = await _mk_confirmed(sid, uid)
+
+    # Mark the session closed
+    async with SessionLocal() as s:
+        sess = await s.get(SessionModel, sid)
+        sess.status = "closed"
+        await s.commit()
+
+    fixed_now = _dt_local(tz, 2026, 4, 4, 12)
+    monkeypatch.setattr(cancel_service, "_now_utc", lambda: fixed_now)
+
+    async with SessionLocal() as s:
+        refund, penalty, state = await cancel_registration(
+            s, registration_id=reg_id, caller_user_id=uid, caller_is_admin=False
+        )
+    assert state == "session_closed"
     assert refund == 0 and penalty == 0

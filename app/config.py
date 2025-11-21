@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     AUTO_CLOSE_INTERVAL_SEC: int = 30      # how often the worker scans
     AUTO_CLOSE_BATCH: int = 200            # max sessions to close per scan
     AUTO_CLOSE_LOCK_TTL_SEC: int = 25      # Redis lock TTL (must be < interval)
+
+    # Twilio SMS
+    TWILIO_ACCOUNT_SID: str | None = None
+    TWILIO_AUTH_TOKEN: str | None = None
+    TWILIO_FROM_NUMBER: str | None = None
     
     @field_validator("SYNC_DATABASE_URL", mode="before")
     @classmethod

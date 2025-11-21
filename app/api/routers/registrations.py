@@ -219,6 +219,8 @@ async def cancel(
     if state == "too_late":
         # You can switch to 409 if you prefer
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="cannot cancel after session start")
+    if state == "session_closed":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="cannot cancel when session closed")
 
     return CancelOut(refund_cents=refund_cents, penalty_cents=penalty_cents, state=state)
 

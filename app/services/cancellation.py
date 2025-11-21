@@ -100,6 +100,11 @@ async def cancel_registration(
         await db.rollback()
         raise PermissionError("forbidden")
 
+    # Sessions that are closed/canceled cannot be modified by attendees
+    if sess.status in ("closed", "canceled"):
+        await db.rollback()
+        return (0, 0, "session_closed")
+
     # If already canceled, return a stable result (no-op)
     if reg.state == "canceled":
         await db.rollback()

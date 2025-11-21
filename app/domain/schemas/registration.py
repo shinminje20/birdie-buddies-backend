@@ -24,7 +24,7 @@ class RegisterIn(BaseModel):
 class CancelOut(BaseModel):
     refund_cents: int
     penalty_cents: int
-    state: str  # canceled | too_late | not_found
+    state: str  # canceled | too_late | not_found | session_closed
 
 class RegisterEnqueuedOut(BaseModel):
     request_id: str
