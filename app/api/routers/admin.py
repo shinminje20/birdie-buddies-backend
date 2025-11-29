@@ -4,9 +4,10 @@ from typing import Optional, List, Annotated
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 
 from ...db import get_db
-from ...models import User, LedgerEntry
+from ...models import User, LedgerEntry, Wallet
 from ...auth.deps import get_current_user
 from ...repos import ledger_repo as ledger_repo
 
@@ -46,6 +47,11 @@ class LedgerOut(BaseModel):
             created_at=e.created_at.isoformat(),
         )
 
+class WalletTotalsOut(BaseModel):
+    total_posted_cents: int
+    total_holds_cents: int
+    total_available_cents: int
+
 
 @router.post("/deposits", response_model=LedgerOut)
 async def deposit(
@@ -83,3 +89,23 @@ async def ledger_admin(
     return [
         LedgerOut.from_model(e) for e in rows
     ]
+
+
+@router.get("/wallets/summary", response_model=WalletTotalsOut)
+async def wallet_totals(
+    db: AsyncSession = Depends(get_db),
+    current: User = Depends(get_current_user),
+):
+    _require_admin(current)
+    res = await db.execute(
+        select(
+            func.coalesce(func.sum(Wallet.posted_cents), 0),
+            func.coalesce(func.sum(Wallet.holds_cents), 0),
+        )
+    )
+    posted, holds = res.first()
+    return WalletTotalsOut(
+        total_posted_cents=int(posted or 0),
+        total_holds_cents=int(holds or 0),
+        total_available_cents=int((posted or 0) - (holds or 0)),
+    )
