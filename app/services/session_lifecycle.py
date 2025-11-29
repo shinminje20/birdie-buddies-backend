@@ -151,6 +151,35 @@ async def admin_update_session(
         # No promotions when canceled
         return sess
 
+    # 1b) Close session (non-cancel) → release waitlist holds and mark them canceled
+    if new_status == "closed":
+        now = datetime.now(timezone.utc)
+
+        waitlisted = (await db.execute(
+            select(Registration)
+            .where(Registration.session_id == session_id, Registration.state == "waitlisted")
+            .with_for_update()
+        )).scalars().all()
+
+        for reg in waitlisted:
+            total_fee = reg.seats * sess.fee_cents
+            await ledger_repo.apply_ledger_entry(
+                db,
+                user_id=reg.host_user_id,
+                kind="hold_release",
+                amount_cents=-total_fee,  # decrease holds
+                session_id=sess.id,
+                registration_id=reg.id,
+                idempotency_key=f"release_close:{reg.id}",
+            )
+            reg.state = "canceled"
+            reg.canceled_at = now
+            reg.waitlist_pos = None
+
+        await db.flush()
+        await db.commit()
+        return sess
+
     # 2) Capacity increased while still scheduled → enqueue promotion
     if new_capacity is not None and new_capacity > confirmed and (new_status or old_status) == "scheduled":
         

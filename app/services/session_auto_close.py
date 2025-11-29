@@ -4,6 +4,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Session as SessionModel
+from ..models import Registration
+from ..repos import ledger_repo
 from ..repos.outbox import add_outbox_event
 from .tx import begin_serializable_tx
 
@@ -39,6 +41,31 @@ async def close_due_sessions(db: AsyncSession, *, batch: int = 200) -> list[str]
         s.status = "closed"
         SESSIONS_AUTOCLOSED.inc()
         closed.append(str(s.id))
+
+        # Refund/release any waitlisted holds; waitlists are moot once closed.
+        waitlisted = (
+            await db.execute(
+                select(Registration)
+                .where(Registration.session_id == s.id, Registration.state == "waitlisted")
+                .with_for_update()
+            )
+        ).scalars().all()
+
+        for reg in waitlisted:
+            hold_cents = reg.seats * s.fee_cents
+            await ledger_repo.apply_ledger_entry(
+                db,
+                user_id=reg.host_user_id,
+                kind="hold_release",
+                amount_cents=-hold_cents,  # decrease holds
+                session_id=s.id,
+                registration_id=reg.id,
+                idempotency_key=f"release_auto_close:{reg.id}",
+            )
+            reg.state = "canceled"
+            reg.canceled_at = now
+            reg.waitlist_pos = None
+
         # Outbox: notify listeners
         await add_outbox_event(
             db,
