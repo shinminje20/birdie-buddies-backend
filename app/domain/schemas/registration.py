@@ -49,6 +49,8 @@ class RegRowOut(BaseModel):
     guest_names: list[str] | None = None
     waitlist_pos: int | None = None
     state: str
+    group_key: uuid.UUID | None = None
+    is_host: bool = False
 
 class MyRegistrationOut(BaseModel):
     """Registration with session details for My Games page"""
@@ -62,6 +64,8 @@ class MyRegistrationOut(BaseModel):
     guest_names: list[str] | None = None
     waitlist_pos: int | None = None
     state: str  # confirmed | waitlisted | canceled
+    group_key: uuid.UUID | None = None
+    is_host: bool = False
 
 class GuestsUpdateIn(BaseModel):
     guest_names: list[str]

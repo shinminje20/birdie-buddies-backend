@@ -4,9 +4,10 @@ from typing import Optional, List, Annotated
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc
 
 from ...db import get_db
-from ...models import User, LedgerEntry
+from ...models import User, LedgerEntry, Session as SessionModel
 from ...auth.deps import get_current_user
 from ...repos.wallets import get_wallet_summary
 from ...repos import ledger_repo as ledger_repo
@@ -27,9 +28,11 @@ class LedgerOut(BaseModel):
     session_id: Optional[uuid.UUID] = None
     registration_id: Optional[uuid.UUID] = None
     created_at: str
+    session_title: Optional[str] = None
+    starts_at_utc: Optional[str] = None
 
     @classmethod
-    def from_model(cls, e: LedgerEntry) -> "LedgerOut":
+    def from_row(cls, e: LedgerEntry, sess_title: Optional[str], sess_starts) -> "LedgerOut":
         return cls(
             id=e.id,
             kind=e.kind,
@@ -37,6 +40,8 @@ class LedgerOut(BaseModel):
             session_id=e.session_id,
             registration_id=e.registration_id,
             created_at=e.created_at.isoformat(),
+            session_title=sess_title,
+            starts_at_utc=sess_starts.isoformat() if sess_starts else None,
         )
 
 
@@ -53,5 +58,15 @@ async def my_ledger(
     limit: Annotated[int, Field(gt=0, le=200)] = 50,
     before_id: Optional[int] = Query(default=None),
 ):
-    rows = await ledger_repo.list_ledger_for_user(db, user_id=current.id, limit=limit, before_id=before_id)
-    return [LedgerOut.from_model(e) for e in rows]
+    q = (
+        select(LedgerEntry, SessionModel.title, SessionModel.starts_at)
+        .join(SessionModel, SessionModel.id == LedgerEntry.session_id, isouter=True)
+        .where(LedgerEntry.user_id == current.id)
+        .order_by(desc(LedgerEntry.id))
+        .limit(limit)
+    )
+    if before_id:
+        q = q.where(LedgerEntry.id < before_id)
+
+    rows = await db.execute(q)
+    return [LedgerOut.from_row(e, title, starts) for (e, title, starts) in rows.all()]

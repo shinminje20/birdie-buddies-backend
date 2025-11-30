@@ -86,6 +86,8 @@ async def my_registrations(
                 guest_names=reg.guest_names or [],
                 waitlist_pos=reg.waitlist_pos,
                 state=reg.state,
+                group_key=reg.group_key,
+                is_host=bool(reg.is_host),
             )
         )
     return out
@@ -250,6 +252,8 @@ async def list_regs_for_session(session_id: uuid.UUID, db: AsyncSession = Depend
                 guest_names=reg.guest_names or [],
                 waitlist_pos=reg.waitlist_pos,
                 state=reg.state,
+                group_key=reg.group_key,
+                is_host=bool(reg.is_host),
             )
         )
     # stable ordering for UI: confirmed first, then waitlist by pos

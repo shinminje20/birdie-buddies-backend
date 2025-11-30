@@ -143,30 +143,49 @@ async def process_registration_request(
     # CASE A: All fit (confirm all as a single group row)
     # ---------------------------
     if remaining >= total_seats:
-        reg = await _create_reg(is_host=True, state="confirmed", seats=total_seats, guest_names=gnames, waitlist_pos=None)
-        # capture total fee
+        # Confirm host as 1-seat row
+        host_reg = await _create_reg(is_host=True, state="confirmed", seats=1, guest_names=[], waitlist_pos=None)
         await ledger_repo.apply_ledger_entry(
             db,
             user_id=user_id,
             kind="fee_capture",
-            amount_cents=-(fee * total_seats),
+            amount_cents=-fee,
             session_id=session_id,
-            registration_id=reg.id,
-            idempotency_key=f"cap:{reg.id}",
+            registration_id=host_reg.id,
+            idempotency_key=f"cap:{host_reg.id}",
         )
-        # outbox event
         try:
             await add_outbox_event(
                 db,
                 channel=f"session:{session_id}",
-                payload={"type": "registration_confirmed", "session_id": str(session_id), "registration_id": str(reg.id), "seats": total_seats},
+                payload={"type": "registration_confirmed", "session_id": str(session_id), "registration_id": str(host_reg.id), "seats": 1},
             )
         except Exception:
-            # outbox is optional; ignore failures to not break booking
             pass
 
+        # Confirm each guest as its own 1-seat row
+        for name in gnames:
+            g_reg = await _create_reg(is_host=False, state="confirmed", seats=1, guest_names=[name], waitlist_pos=None)
+            await ledger_repo.apply_ledger_entry(
+                db,
+                user_id=user_id,
+                kind="fee_capture",
+                amount_cents=-fee,
+                session_id=session_id,
+                registration_id=g_reg.id,
+                idempotency_key=f"cap:{g_reg.id}",
+            )
+            try:
+                await add_outbox_event(
+                    db,
+                    channel=f"session:{session_id}",
+                    payload={"type": "registration_confirmed", "session_id": str(session_id), "registration_id": str(g_reg.id), "seats": 1},
+                )
+            except Exception:
+                pass
+
         await db.commit()
-        return ("confirmed", reg.id, None)
+        return ("confirmed", host_reg.id, None)
 
     # ---------------------------
     # CASE B: No seats left (pure waitlist). Host first, then each guest as 1-seat rows.
