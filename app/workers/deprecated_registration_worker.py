@@ -62,7 +62,7 @@ async def handle_message(session_id: uuid.UUID, msg_id: str, fields: Dict[str, s
 
     # Process in DB
     async with SessionLocal() as db:  # type: AsyncSession
-        state, reg_id, wl_pos = await process_registration_request(
+        state, reg_id, wl_pos, reg_ids = await process_registration_request(
             db,
             request_id=req_id,
             session_id=session_id,
@@ -73,10 +73,11 @@ async def handle_message(session_id: uuid.UUID, msg_id: str, fields: Dict[str, s
 
     # Update status hash
     updates: Dict[str, Any] = {"state": state}
+    # map all created registrations -> request for future status updates (promotion)
+    for rid in reg_ids:
+        await redis.set(k_reg2req(rid), req_id, ex=REQ_TTL_SEC)
     if reg_id:
         updates["registration_id"] = str(reg_id)
-        # map registration -> request for future status updates (promotion)
-        await redis.set(k_reg2req(reg_id), req_id, ex=REQ_TTL_SEC)
     if wl_pos is not None:
         updates["waitlist_pos"] = str(wl_pos)
     await _update_request_status(req_id, updates)

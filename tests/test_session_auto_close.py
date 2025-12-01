@@ -93,7 +93,7 @@ async def test_auto_close_releases_waitlist_holds(db):
 
     # Add a waitlisted registration
     async with SessionLocal() as s:
-        state, reg_id, pos = await process_registration_request(
+        state, reg_id, pos, _ = await process_registration_request(
             s, request_id="req-1", session_id=sid, user_id=uid, seats=1, guest_names=[]
         )
         assert state == "waitlisted" and reg_id is not None and pos == 1
@@ -136,7 +136,7 @@ async def test_admin_close_releases_waitlist_holds(db):
     uid = await mk_user(db, "wl2@x.test", "Waitlist2")
     await deposit(db, uid, 10_000)
 
-    state, reg_id, pos = await process_registration_request(
+    state, reg_id, pos, _ = await process_registration_request(
         db, request_id="req-2", session_id=sid, user_id=uid, seats=1, guest_names=[]
     )
     assert state == "waitlisted" and reg_id is not None and pos == 1

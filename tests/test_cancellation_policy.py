@@ -19,7 +19,7 @@ def _dt_local(tz: str, y, mo, d, h, m=0):
 
 async def _mk_confirmed(sid, uid, seats=1):
     async with SessionLocal() as s:
-        state, reg_id, _ = await process_registration_request(
+        state, reg_id, _, _ = await process_registration_request(
             s, request_id=f"r:{uid}", session_id=sid, user_id=uid, seats=seats, guest_names=[]
         )
     return reg_id

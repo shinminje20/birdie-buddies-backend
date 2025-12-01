@@ -45,8 +45,8 @@ async def test_waitlist_promotion_strict_fifo(db: AsyncSession):
     async with SessionLocal() as s5:
         res_t = await process_registration_request(s5, request_id="r-tail", session_id=sid, user_id=ut, seats=1, guest_names=[])
 
-    _, head_id, head_pos = res_h
-    _, tail_id, tail_pos = res_t
+    _, head_id, head_pos, _ = res_h
+    _, tail_id, tail_pos, _ = res_t
     assert head_pos == 1 and tail_pos == 2  # initial waitlist order
 
     # Free one seat -> head (needs 2) should NOT be skipped

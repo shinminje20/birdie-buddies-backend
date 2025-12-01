@@ -49,13 +49,13 @@ async def process_registration_request(
     user_id: uuid.UUID,
     seats: int,                # 1..3 (API should validate)
     guest_names: Sequence[str] | None,
-) -> Tuple[str, Optional[uuid.UUID], Optional[int]]:
+) -> Tuple[str, Optional[uuid.UUID], Optional[int], list[uuid.UUID]]:
     """
     Allocate registration(s) according to the priority rule:
       - host seat has priority; guests are handled individually.
       - if partial fit, confirm host only, guests go to waitlist tail as 1-seat regs each.
 
-    Returns: (state_for_host, host_registration_id, waitlist_pos_for_host_if_waitlisted)
+    Returns: (state_for_host, host_registration_id, waitlist_pos_for_host_if_waitlisted, all_created_registration_ids)
              state_for_host is one of {'confirmed','waitlisted','rejected'}
 
     This function runs inside a SERIALIZABLE transaction (see begin_serializable_tx).
@@ -67,13 +67,13 @@ async def process_registration_request(
     sess = srow.scalar_one_or_none()
     if not sess or sess.status != "scheduled":
         await db.rollback()
-        return ("rejected", None, None)
+        return ("rejected", None, None, [])
 
     # (Optional) disallow after start time
     now_utc = datetime.now(timezone.utc)
     if now_utc >= sess.starts_at:
         await db.rollback()
-        return ("rejected", None, None)
+        return ("rejected", None, None, [])
 
     # 2) Enforce "one active host seat per user per session"
     already_host = await db.execute(
@@ -86,7 +86,7 @@ async def process_registration_request(
     )
     if already_host.first():
         await db.rollback()
-        return ("rejected", None, None)
+        return ("rejected", None, None, [])
 
     # 3) Normalize guest names and seat count
     # gnames = [g.strip() for g in (guest_names or []) if g and g.strip()]
@@ -112,13 +112,15 @@ async def process_registration_request(
     if w.available_cents < required_cents:
         # Not enough balance to hold/capture total seats — reject cleanly
         await db.rollback()
-        return ("rejected", None, None)
+        return ("rejected", None, None, [])
     
     # 4) Remaining seats snapshot
     remaining = await _get_remaining_seats(db, session_id)
 
     # 5) Group key (used to tie host+guests together; also useful if host is waitlisted solo)
     group_key: uuid.UUID | None = uuid.uuid4() if (total_seats > 1 or remaining == 0) else None
+
+    created_reg_ids: list[uuid.UUID] = []
 
     async def _create_reg(
         *, is_host: bool, state: str, seats: int, guest_names: list[str], waitlist_pos: Optional[int]
@@ -135,6 +137,7 @@ async def process_registration_request(
         )
         db.add(r)
         await db.flush()
+        created_reg_ids.append(r.id)
         return r
 
     fee = int(sess.fee_cents)
@@ -185,7 +188,7 @@ async def process_registration_request(
                 pass
 
         await db.commit()
-        return ("confirmed", host_reg.id, None)
+        return ("confirmed", host_reg.id, None, created_reg_ids)
 
     # ---------------------------
     # CASE B: No seats left (pure waitlist). Host first, then each guest as 1-seat rows.
@@ -241,7 +244,7 @@ async def process_registration_request(
                 pass
 
         await db.commit()
-        return ("waitlisted", host_reg.id, host_reg.waitlist_pos)
+        return ("waitlisted", host_reg.id, host_reg.waitlist_pos, created_reg_ids)
 
     # ---------------------------
     # CASE C: Partial fit (0 < remaining < total_seats)
@@ -328,4 +331,4 @@ async def process_registration_request(
                 pass
 
     await db.commit()
-    return ("confirmed", host_reg.id, None)
+    return ("confirmed", host_reg.id, None, created_reg_ids)
