@@ -13,12 +13,12 @@ from ..observability.metrics import SESSIONS_AUTOCLOSED
 
 async def close_due_sessions(db: AsyncSession, *, batch: int = 200) -> list[str]:
     """
-    Close at most `batch` sessions whose starts_at are at least 3 hours in the past
-    (starts_at + 3h <= now) and status == 'scheduled'. Returns list of session_id
+    Close at most `batch` sessions whose starts_at are at least 2 hours in the past
+    (starts_at + 2h <= now) and status == 'scheduled'. Returns list of session_id
     strings closed in this run.
     """
     now = datetime.now(timezone.utc)
-    close_cutoff = now - timedelta(hours=3)
+    close_cutoff = now - timedelta(hours=2)
     closed: list[str] = []
 
     # Start a fresh tx; SELECT ... FOR UPDATE SKIP LOCKED to avoid races with admins

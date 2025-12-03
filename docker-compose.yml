@@ -115,7 +115,7 @@ services:
     container_name: birdie-worker-session-closer
     env_file: [./.env]
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/app
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/birdiebuddies
       REDIS_URL: redis://redis:6379/0
       AUTO_CLOSE_INTERVAL_SEC: "30" # adjust as desired
       AUTO_CLOSE_BATCH: "200"

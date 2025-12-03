@@ -15,12 +15,12 @@ from app.db import SessionLocal
 pytestmark = pytest.mark.asyncio
 
 
-async def test_auto_close_waits_three_hours(db):
+async def test_auto_close_waits_two_hours(db):
     now = datetime.now(timezone.utc)
     recent_sid = await mk_session(
         db,
         title="recent",
-        starts_at_utc=now - timedelta(hours=2),
+        starts_at_utc=now - timedelta(hours=1),
         tz="UTC",
         capacity=5,
         fee_cents=1000,
@@ -28,7 +28,7 @@ async def test_auto_close_waits_three_hours(db):
     overdue_sid = await mk_session(
         db,
         title="overdue",
-        starts_at_utc=now - timedelta(hours=4),
+        starts_at_utc=now - timedelta(hours=3),
         tz="UTC",
         capacity=5,
         fee_cents=1000,
