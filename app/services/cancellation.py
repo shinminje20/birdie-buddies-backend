@@ -128,6 +128,7 @@ async def cancel_registration(
 
         refund_cents = 0
         penalty_cents = 0
+        original_state = target.state
 
         if target.state == "waitlisted":
             # Release the corresponding hold portion
@@ -177,6 +178,7 @@ async def cancel_registration(
             target.state = "canceled"
             target.canceled_at = now_utc
             await db.flush()
+        target.canceled_from_state = original_state
 
         # Outbox event per canceled reg
         await add_outbox_event(

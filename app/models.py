@@ -123,6 +123,11 @@ class Registration(Base):
         pg.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("now()")
     )
     canceled_at: Mapped[Optional[datetime]] = mapped_column(pg.TIMESTAMP(timezone=True), nullable=True)
+    canceled_from_state: Mapped[Optional[str]] = mapped_column(
+        sa.Text,
+        nullable=True,
+        doc="State the registration was in when it was canceled (confirmed|waitlisted)",
+    )
     
     
     __table_args__ = (

@@ -51,6 +51,8 @@ class RegRowOut(BaseModel):
     state: str
     group_key: uuid.UUID | None = None
     is_host: bool = False
+    canceled_at: datetime | None = None
+    canceled_from_state: str | None = None
 
 class MyRegistrationOut(BaseModel):
     """Registration with session details for My Games page"""

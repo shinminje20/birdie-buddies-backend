@@ -88,6 +88,7 @@ async def my_registrations(
                 state=reg.state,
                 group_key=reg.group_key,
                 is_host=bool(reg.is_host),
+                canceled_at=reg.canceled_at,
             )
         )
     return out
@@ -254,6 +255,8 @@ async def list_regs_for_session(session_id: uuid.UUID, db: AsyncSession = Depend
                 state=reg.state,
                 group_key=reg.group_key,
                 is_host=bool(reg.is_host),
+                canceled_at=reg.canceled_at,
+                canceled_from_state=reg.canceled_from_state,
             )
         )
     # stable ordering for UI: confirmed first, then waitlist by pos

@@ -5,6 +5,8 @@ from datetime import datetime, timezone, timedelta
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError
 
 from ..config import get_settings
 from ..db import SessionLocal
@@ -108,7 +110,7 @@ async def run_once():
             log.info("🔧 Starting Gmail watch renewal...")
 
             # Renew the watch
-            # Create credentials from refresh token
+            # Create credentials from refresh token and force a refresh to get a valid access token
             log.debug("Creating OAuth credentials from refresh token...")
             credentials = Credentials(
                 token=None,
@@ -118,6 +120,12 @@ async def run_once():
                 client_secret=S.GOOGLE_CLIENT_SECRET,
                 scopes=SCOPES
             )
+
+            try:
+                credentials.refresh(Request())
+            except RefreshError as e:
+                log.error("❌ Failed to refresh Gmail OAuth credentials. Reauthorize via /gmail/authorize. Error: %s", e)
+                return False
 
             # Build Gmail service
             log.debug("Building Gmail API service...")
